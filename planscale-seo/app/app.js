@@ -189,6 +189,13 @@ const state = {
   lastPointerUpAt: 0,
 };
 
+const POLYGON_SNAP_OPTIONS = {
+  axisFieldRadiusPx: 240,
+  axisTolerancePx: 11,
+  endpointTolerancePx: 18,
+  strongEndpointTolerancePx: 10,
+};
+
 let nextSegmentId = 1;
 let nextPolygonId = 1;
 let analysisRunId = 0;
@@ -633,7 +640,6 @@ function updateToolControls() {
 
   const hasBase = Boolean(state.referenceId);
   const hasSegments = state.segments.length > 0;
-  const baseLengthComplete = hasCompleteBaseLength();
   referenceLengthInput.disabled = !hasBase;
   focusReferenceButton.hidden = !hasBase;
   focusBaseInputButton.disabled = !hasBase;
@@ -651,11 +657,8 @@ function updateToolControls() {
   if (finishPolygonButton) {
     finishPolygonButton.hidden = !(state.isDrawingArea && state.polygonPoints.length >= 3);
   }
-  const sidebarLocked = isMobileLayout() && state.image && !baseLengthComplete;
-  sidebarToggleButton.disabled = sidebarLocked;
-  sidebarToggleButton.title = sidebarLocked
-    ? "Сначала задайте масштаб"
-    : state.sidebarCollapsed
+  sidebarToggleButton.disabled = false;
+  sidebarToggleButton.title = state.sidebarCollapsed
       ? "Показать измерения"
       : "Скрыть измерения";
   sidebarToggleButton.setAttribute("aria-label", sidebarToggleButton.title);
@@ -1229,7 +1232,7 @@ function findOrthogonalSnapPoint(point, anchor, axis, segmentId) {
   return closest;
 }
 
-function resolveEndpointPoint(rawPoint, fixedEndpoint, segmentId) {
+function resolveEndpointPoint(rawPoint, fixedEndpoint, segmentId, options = {}) {
   const resolved = resolvePointWithSnaps({
     rawPoint,
     fixedEndpoint,
@@ -1237,6 +1240,7 @@ function resolveEndpointPoint(rawPoint, fixedEndpoint, segmentId) {
     segments: state.segments,
     scale: state.scale,
     smartGridEnabled: state.smartGridEnabled,
+    ...options,
   });
 
   if (resolved.snap?.point && !resolved.snap.screen) {
@@ -1244,6 +1248,48 @@ function resolveEndpointPoint(rawPoint, fixedEndpoint, segmentId) {
   }
 
   return resolved;
+}
+
+function polygonSnapOptions() {
+  const coarseMultiplier = isCoarsePointer() ? 1.45 : 1;
+  return {
+    ...POLYGON_SNAP_OPTIONS,
+    axisFieldRadiusPx: POLYGON_SNAP_OPTIONS.axisFieldRadiusPx * coarseMultiplier,
+    axisTolerancePx: POLYGON_SNAP_OPTIONS.axisTolerancePx * coarseMultiplier,
+    endpointTolerancePx: POLYGON_SNAP_OPTIONS.endpointTolerancePx * coarseMultiplier,
+    strongEndpointTolerancePx: POLYGON_SNAP_OPTIONS.strongEndpointTolerancePx * coarseMultiplier,
+    extraPoints: state.polygonPoints,
+  };
+}
+
+function resolvePolygonPoint(rawPoint) {
+  const closePoint = polygonCloseSnapFor(rawPoint);
+  if (closePoint) {
+    return {
+      point: closePoint,
+      snap: { point: closePoint, screen: imageToScreen(closePoint) },
+      guide: null,
+      alignmentGuide: null,
+      close: true,
+    };
+  }
+
+  const anchor = state.polygonPoints.at(-1);
+  if (!anchor) {
+    const resolvedStart = resolveStartPoint(rawPoint);
+    return {
+      point: resolvedStart.point,
+      snap: resolvedStart.snap,
+      guide: null,
+      alignmentGuide: null,
+      close: false,
+    };
+  }
+
+  return {
+    ...resolveEndpointPoint(rawPoint, anchor, null, polygonSnapOptions()),
+    close: false,
+  };
 }
 
 function smartGridPoint(point, anchor) {
@@ -2141,7 +2187,9 @@ function drawPendingPolygon() {
   }
 
   ctx.save();
-  ctx.strokeStyle = state.polygonCloseTarget ? CANVAS_COLORS.area : "rgba(15, 143, 115, 0.74)";
+  ctx.strokeStyle = state.polygonCloseTarget || state.orthogonalGuide
+    ? CANVAS_COLORS.area
+    : "rgba(15, 143, 115, 0.58)";
   ctx.fillStyle = "rgba(15, 143, 115, 0.08)";
   ctx.lineWidth = 2;
   ctx.setLineDash([7, 6]);
@@ -2239,6 +2287,7 @@ function drawSnapPointAt(screen) {
 function drawOrthogonalGuide() {
   if (!state.orthogonalGuide) return;
   if (state.pendingPoint && state.previewPoint) return;
+  if (state.isDrawingArea && state.polygonPoints.length && state.polygonPreviewPoint) return;
 
   const anchor = imageToScreen(state.orthogonalGuide.anchor);
   const point = imageToScreen(state.orthogonalGuide.point);
@@ -2283,6 +2332,15 @@ function drawAlignmentGuide() {
       state.previewPoint &&
       Math.hypot(from.x - imageToScreen(state.pendingPoint).x, from.y - imageToScreen(state.pendingPoint).y) < 1 &&
       Math.hypot(to.x - imageToScreen(state.previewPoint).x, to.y - imageToScreen(state.previewPoint).y) < 1
+    ) {
+      continue;
+    }
+    if (
+      state.isDrawingArea &&
+      state.polygonPoints.length &&
+      state.polygonPreviewPoint &&
+      Math.hypot(from.x - imageToScreen(state.polygonPoints.at(-1)).x, from.y - imageToScreen(state.polygonPoints.at(-1)).y) < 1 &&
+      Math.hypot(to.x - imageToScreen(state.polygonPreviewPoint).x, to.y - imageToScreen(state.polygonPreviewPoint).y) < 1
     ) {
       continue;
     }
@@ -3050,13 +3108,14 @@ finishPolygonButton?.addEventListener("click", finishPolygon);
 
 reanalyzeButton.addEventListener("click", () => {
   if (!state.image || state.isAnalyzing) return;
-  state.nextActionPromptVisible = false;
+  state.nextActionPromptVisible = true;
   state.workflowMode = "auto";
   state.isDrawingSegments = false;
   state.isDrawingArea = false;
+  state.detectedSegments = [];
   cancelPendingLine();
   cancelPendingPolygon();
-  analyzeImageSegments({ automatic: false, sensitivity: state.detectionSensitivity });
+  updateAll();
 });
 
 removeUnderlayButton.addEventListener("click", () => {
@@ -3342,10 +3401,6 @@ scaleRulerResetButton?.addEventListener("click", () => {
 });
 
 function setSidebarCollapsed(collapsed) {
-  if (!collapsed && isMobileLayout() && state.image && !hasCompleteBaseLength()) {
-    showToast("Сначала задайте длину базового отрезка");
-    return;
-  }
   state.sidebarCollapsed = collapsed;
   updateToolControls();
   syncCanvasAfterLayout();
@@ -3382,9 +3437,12 @@ canvas.addEventListener("pointerdown", (event) => {
       state.snapPoint = resolveStartPoint(rawPoint).snap;
     }
     if (state.isDrawingArea) {
-      const closePoint = polygonCloseSnapFor(rawPoint);
-      state.polygonCloseTarget = closePoint;
-      state.polygonPreviewPoint = closePoint || rawPoint;
+      const resolved = resolvePolygonPoint(rawPoint);
+      state.polygonCloseTarget = resolved.close ? resolved.point : null;
+      state.polygonPreviewPoint = resolved.point;
+      state.snapPoint = resolved.snap;
+      state.orthogonalGuide = resolved.guide;
+      state.alignmentGuide = resolved.alignmentGuide;
     }
     state.interactionMode = state.isDrawingArea ? "draw-area" : "draw-line";
     state.dragStart = {
@@ -3515,9 +3573,12 @@ canvas.addEventListener("pointermove", (event) => {
       draw();
     } else if (state.isDrawingArea) {
       const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-      const closePoint = polygonCloseSnapFor(rawPoint);
-      state.polygonCloseTarget = closePoint;
-      state.polygonPreviewPoint = closePoint || rawPoint;
+      const resolved = resolvePolygonPoint(rawPoint);
+      state.polygonCloseTarget = resolved.close ? resolved.point : null;
+      state.polygonPreviewPoint = resolved.point;
+      state.snapPoint = resolved.snap;
+      state.orthogonalGuide = resolved.guide;
+      state.alignmentGuide = resolved.alignmentGuide;
       draw();
     }
     return;
@@ -3562,9 +3623,12 @@ canvas.addEventListener("pointermove", (event) => {
       draw();
     } else if (state.interactionMode === "draw-area") {
       const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-      const closePoint = polygonCloseSnapFor(rawPoint);
-      state.polygonCloseTarget = closePoint;
-      state.polygonPreviewPoint = closePoint || rawPoint;
+      const resolved = resolvePolygonPoint(rawPoint);
+      state.polygonCloseTarget = resolved.close ? resolved.point : null;
+      state.polygonPreviewPoint = resolved.point;
+      state.snapPoint = resolved.snap;
+      state.orthogonalGuide = resolved.guide;
+      state.alignmentGuide = resolved.alignmentGuide;
       draw();
     } else if (state.interactionMode === "base-pick") {
       state.offsetX = state.dragStart.offsetX + dx;
@@ -3631,8 +3695,8 @@ canvas.addEventListener("pointerup", (event) => {
 
   if (shouldAddPolygonPoint) {
     const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-    const closePoint = polygonCloseSnapFor(rawPoint);
-    addPolygonPoint(closePoint || rawPoint);
+    const resolved = resolvePolygonPoint(rawPoint);
+    addPolygonPoint(resolved.point);
   } else if (shouldAddPoint) {
     const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
     const resolvedStart = state.pendingPoint ? null : resolveStartPoint(rawPoint);

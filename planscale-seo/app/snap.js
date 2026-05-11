@@ -20,23 +20,34 @@ function buildLineGuide(from, to, axis) {
   };
 }
 
-function findExactEndpointSnap(point, segments, segmentId, scale, tolerancePx = 11) {
-  let closest = null;
-  let closestDistance = Infinity;
+function collectSnapPoints(segments, segmentId, extraPoints = []) {
+  const points = [];
 
   for (const segment of segments) {
     if (segment.id === segmentId) continue;
+    points.push(segment.start, segment.end);
+  }
 
-    for (const endpoint of [segment.start, segment.end]) {
-      const distance = Math.hypot(
-        imageDistanceToScreen(point.x - endpoint.x, scale),
-        imageDistanceToScreen(point.y - endpoint.y, scale),
-      );
+  for (const point of extraPoints) {
+    if (point) points.push(point);
+  }
 
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closest = endpoint;
-      }
+  return points;
+}
+
+function findExactEndpointSnap(point, segments, segmentId, scale, tolerancePx = 11, extraPoints = []) {
+  let closest = null;
+  let closestDistance = Infinity;
+
+  for (const endpoint of collectSnapPoints(segments, segmentId, extraPoints)) {
+    const distance = Math.hypot(
+      imageDistanceToScreen(point.x - endpoint.x, scale),
+      imageDistanceToScreen(point.y - endpoint.y, scale),
+    );
+
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closest = endpoint;
     }
   }
 
@@ -45,27 +56,35 @@ function findExactEndpointSnap(point, segments, segmentId, scale, tolerancePx = 
     : null;
 }
 
-function findAxisAlignment(point, segments, segmentId, scale, { fieldCenter = point, fieldRadiusPx = 150, lockAxis = null, tolerancePx = 7 } = {}) {
+function findAxisAlignment(
+  point,
+  segments,
+  segmentId,
+  scale,
+  {
+    fieldCenter = point,
+    fieldRadiusPx = 150,
+    lockAxis = null,
+    tolerancePx = 7,
+    extraPoints = [],
+  } = {},
+) {
   let bestX = null;
   let bestY = null;
 
-  for (const segment of segments) {
-    if (segment.id === segmentId) continue;
+  for (const endpoint of collectSnapPoints(segments, segmentId, extraPoints)) {
+    const fieldDistance = screenDistanceBetweenPoints(fieldCenter, endpoint, scale);
+    if (fieldDistance > fieldRadiusPx) continue;
 
-    for (const endpoint of [segment.start, segment.end]) {
-      const fieldDistance = screenDistanceBetweenPoints(fieldCenter, endpoint, scale);
-      if (fieldDistance > fieldRadiusPx) continue;
+    const dx = imageDistanceToScreen(point.x - endpoint.x, scale);
+    const dy = imageDistanceToScreen(point.y - endpoint.y, scale);
 
-      const dx = imageDistanceToScreen(point.x - endpoint.x, scale);
-      const dy = imageDistanceToScreen(point.y - endpoint.y, scale);
+    if (lockAxis !== "vertical" && dx <= tolerancePx && (!bestX || dx < bestX.distance || (dx === bestX.distance && fieldDistance < bestX.fieldDistance))) {
+      bestX = { endpoint, distance: dx, fieldDistance };
+    }
 
-      if (lockAxis !== "vertical" && dx <= tolerancePx && (!bestX || dx < bestX.distance || (dx === bestX.distance && fieldDistance < bestX.fieldDistance))) {
-        bestX = { endpoint, distance: dx, fieldDistance };
-      }
-
-      if (lockAxis !== "horizontal" && dy <= tolerancePx && (!bestY || dy < bestY.distance || (dy === bestY.distance && fieldDistance < bestY.fieldDistance))) {
-        bestY = { endpoint, distance: dy, fieldDistance };
-      }
+    if (lockAxis !== "horizontal" && dy <= tolerancePx && (!bestY || dy < bestY.distance || (dy === bestY.distance && fieldDistance < bestY.fieldDistance))) {
+      bestY = { endpoint, distance: dy, fieldDistance };
     }
   }
 
@@ -115,13 +134,18 @@ function resolvePointWithSnaps({
   segments,
   scale,
   smartGridEnabled,
+  endpointTolerancePx = 11,
+  strongEndpointTolerancePx = 8,
+  axisFieldRadiusPx = 150,
+  axisTolerancePx = 7,
+  extraPoints = [],
 }) {
   if (!rawPoint) {
     return { point: rawPoint, snap: null, guide: null, alignmentGuide: null, axis: null };
   }
 
-  const endpointSnap = findExactEndpointSnap(rawPoint, segments, segmentId, scale);
-  if (endpointSnap && endpointSnap.distance <= 8) {
+  const endpointSnap = findExactEndpointSnap(rawPoint, segments, segmentId, scale, endpointTolerancePx, extraPoints);
+  if (endpointSnap && endpointSnap.distance <= strongEndpointTolerancePx) {
     return {
       point: endpointSnap.point,
       snap: { point: endpointSnap.point },
@@ -136,7 +160,13 @@ function resolvePointWithSnaps({
     if (axis) {
       const ortho = snapToOrthogonalAxis(rawPoint, fixedEndpoint);
       const lockAxis = axis === "horizontal" ? "horizontal" : "vertical";
-      const axisSnap = findAxisAlignment(ortho.point, segments, segmentId, scale, { fieldCenter: rawPoint, lockAxis });
+      const axisSnap = findAxisAlignment(ortho.point, segments, segmentId, scale, {
+        fieldCenter: rawPoint,
+        fieldRadiusPx: axisFieldRadiusPx,
+        lockAxis,
+        tolerancePx: axisTolerancePx,
+        extraPoints,
+      });
       const point = axisSnap ? axisSnap.point : ortho.point;
 
       return {
@@ -163,7 +193,12 @@ function resolvePointWithSnaps({
     };
   }
 
-  const axisSnap = findAxisAlignment(rawPoint, segments, segmentId, scale, { fieldCenter: rawPoint });
+  const axisSnap = findAxisAlignment(rawPoint, segments, segmentId, scale, {
+    fieldCenter: rawPoint,
+    fieldRadiusPx: axisFieldRadiusPx,
+    tolerancePx: axisTolerancePx,
+    extraPoints,
+  });
   if (axisSnap) {
     return {
       point: axisSnap.point,

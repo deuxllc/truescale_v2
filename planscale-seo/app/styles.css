@@ -4599,3 +4599,614 @@ body.sidebar-collapsed:not(.empty-mode) aside.panel,
     content: none;
   }
 }
+
+/* TrueScale v2 workspace architecture. */
+body:not(.empty-mode) .status,
+body:not(.empty-mode) .help-button,
+body:not(.empty-mode) #removeUnderlayButton,
+body:not(.empty-mode) .snap-toggle {
+  display: none !important;
+}
+
+body:not(.empty-mode) .topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+body:not(.empty-mode) .topbar::before {
+  content: none !important;
+}
+
+body:not(.empty-mode) .topbar > .toolbar-group {
+  display: contents;
+}
+
+body:not(.empty-mode) .topbar .tool-button,
+body:not(.empty-mode) .topbar .icon-button {
+  height: 38px;
+  min-height: 38px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body:not(.empty-mode) .topbar .icon-button {
+  width: 38px;
+}
+
+body:not(.empty-mode) .plan-upload-button {
+  order: 10;
+}
+
+body:not(.empty-mode) #reanalyzeButton {
+  order: 20;
+}
+
+body:not(.empty-mode) #recalibrateButton {
+  order: 30;
+  width: auto !important;
+  min-width: 0;
+  padding: 0 12px;
+  color: var(--ink);
+  background: #fff;
+}
+
+body:not(.empty-mode) #recalibrateButton.needs-attention {
+  border-color: rgba(215, 222, 232, 0.95);
+  box-shadow: none;
+}
+
+body:not(.empty-mode) #undoButton {
+  order: 40;
+  margin-left: auto;
+}
+
+body:not(.empty-mode) #redoButton {
+  order: 41;
+}
+
+body:not(.empty-mode) #sidebarToggleButton {
+  order: 50;
+  display: inline-flex !important;
+}
+
+body:not(.empty-mode) .export-menu-wrap {
+  order: 60;
+}
+
+body:not(.empty-mode) .settings-menu-wrap {
+  order: 70;
+}
+
+.settings-danger-zone {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(215, 222, 232, 0.86);
+}
+
+.settings-danger-zone > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-danger-zone .reset-top-button {
+  grid-column: auto !important;
+  grid-row: auto !important;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body.empty-mode aside.panel {
+  display: none !important;
+}
+
+body:not(.empty-mode) aside.panel,
+body.sidebar-collapsed:not(.empty-mode) aside.panel,
+body:not(.empty-mode):not(.sidebar-collapsed) aside.panel,
+body.sidebar-collapsed:not(.empty-mode) aside.panel {
+  display: grid !important;
+}
+
+body:not(.empty-mode) aside.panel {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  left: auto !important;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 36;
+  width: min(380px, calc(100vw - 32px));
+  max-height: none;
+  overflow: hidden;
+  transform: translateX(calc(100% + 32px));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 180ms ease, opacity 180ms ease, visibility 180ms ease;
+}
+
+.panel-close-button {
+  display: inline-flex !important;
+  margin-left: auto;
+}
+
+body:not(.empty-mode):not(.sidebar-collapsed) aside.panel {
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+@media (min-width: 980px) {
+  body:not(.empty-mode) .workspace {
+    grid-template-columns: 52px minmax(0, 1fr) !important;
+    grid-template-rows: auto auto auto auto minmax(420px, 1fr);
+    align-items: stretch;
+  }
+
+  body:not(.empty-mode) .topbar,
+  body:not(.empty-mode) .export-status,
+  body:not(.empty-mode) .review-banner,
+  body:not(.empty-mode) .calibration-hint,
+  body:not(.empty-mode) .base-confirm {
+    grid-column: 1 / -1 !important;
+  }
+
+  body:not(.empty-mode) .canvas-wrap {
+    grid-column: 2 !important;
+    grid-row: 5 !important;
+  }
+
+  body:not(.empty-mode) .segment-tools-group {
+    grid-column: 1 !important;
+    grid-row: 5 !important;
+    position: sticky !important;
+    top: 92px;
+    z-index: 18;
+    display: grid !important;
+    grid-template-columns: 40px;
+    align-self: start;
+    gap: 8px;
+    width: 52px;
+    padding: 8px 6px;
+    border: 1px solid rgba(215, 222, 232, 0.9);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.88) !important;
+    box-shadow: var(--soft-shadow);
+  }
+
+  body:not(.empty-mode) .segment-tools-group::before {
+    content: none !important;
+  }
+
+  body:not(.empty-mode) .segment-tools-group .tool-button,
+  body:not(.empty-mode) .segment-tools-group .icon-button {
+    width: 40px !important;
+    height: 40px !important;
+    min-height: 40px;
+    padding: 0;
+  }
+
+  body:not(.empty-mode) #clearButton {
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  body:not(.empty-mode) .workspace {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  body:not(.empty-mode) .topbar {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+
+  body:not(.empty-mode) .topbar .tool-button,
+  body:not(.empty-mode) .topbar .icon-button,
+  body:not(.empty-mode) .topbar #settingsButton {
+    width: 100% !important;
+    min-width: 0;
+    height: 42px;
+    min-height: 42px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  body:not(.empty-mode) .topbar #reanalyzeButton,
+  body:not(.empty-mode) .topbar #exportMenuButton,
+  body:not(.empty-mode) .topbar .export-menu-wrap #exportMenuButton,
+  body:not(.empty-mode) .topbar #sidebarToggleButton,
+  body:not(.empty-mode) .topbar #recalibrateButton,
+  body:not(.empty-mode) .topbar .plan-upload-button {
+    width: 100% !important;
+    flex: 0 1 auto !important;
+  }
+
+  body:not(.empty-mode) .topbar #exportMenuButton span,
+  body:not(.empty-mode) .topbar #reanalyzeButton span {
+    display: inline;
+  }
+
+  body:not(.empty-mode) .topbar .icon-button {
+    padding: 0;
+  }
+
+  body:not(.empty-mode) .plan-upload-button {
+    grid-column: 1 / span 2;
+    grid-row: 1;
+  }
+
+  body:not(.empty-mode) #reanalyzeButton {
+    grid-column: 3 / span 2;
+    grid-row: 1;
+  }
+
+  body:not(.empty-mode) #undoButton {
+    grid-column: 1;
+    grid-row: 2;
+    margin-left: 0;
+  }
+
+  body:not(.empty-mode) #redoButton {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  body:not(.empty-mode) #sidebarToggleButton {
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  body:not(.empty-mode) #sidebarToggleButton span {
+    display: none;
+  }
+
+  body:not(.empty-mode) #recalibrateButton {
+    grid-column: 1 / span 2;
+    grid-row: 3;
+  }
+
+  body:not(.empty-mode) .export-menu-wrap {
+    grid-column: 3 / span 2;
+    grid-row: 3;
+    width: 100%;
+  }
+
+  body:not(.empty-mode) .settings-menu-wrap {
+    grid-column: 4;
+    grid-row: 2;
+    width: 100%;
+  }
+
+  body:not(.empty-mode) .canvas-wrap,
+  body:not(.empty-mode) .export-status,
+  body:not(.empty-mode) .review-banner,
+  body:not(.empty-mode) .calibration-hint,
+  body:not(.empty-mode) .base-confirm {
+    grid-column: 1 / -1 !important;
+  }
+
+  body:not(.empty-mode) .segment-tools-group {
+    position: fixed !important;
+    left: 50%;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 34;
+    transform: translateX(-50%);
+    display: grid !important;
+    grid-template-columns: repeat(4, 46px);
+    gap: 8px;
+    width: auto;
+    padding: 8px;
+    border: 1px solid rgba(215, 222, 232, 0.92);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.94) !important;
+    box-shadow: 0 14px 34px rgba(31, 41, 55, 0.18);
+    backdrop-filter: blur(18px);
+  }
+
+  body:not(.empty-mode) .segment-tools-group::before {
+    content: none !important;
+  }
+
+  body:not(.empty-mode) .segment-tools-group .tool-button,
+  body:not(.empty-mode) .segment-tools-group .icon-button {
+    width: 46px !important;
+    height: 46px !important;
+    min-height: 46px;
+    padding: 0;
+  }
+
+  body:not(.empty-mode) #clearButton {
+    display: none !important;
+  }
+
+  body:not(.empty-mode) #selectModeButton {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  body:not(.empty-mode) #drawSegmentButton {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  body:not(.empty-mode) #drawAreaButton {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  body:not(.empty-mode) #toggleAllFootnotesButton {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  body:not(.empty-mode) .finish-polygon-button {
+    bottom: calc(82px + env(safe-area-inset-bottom));
+  }
+
+  body:not(.empty-mode) .next-action-panel {
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    width: auto;
+    transform: none;
+  }
+
+  body:not(.empty-mode) aside.panel {
+    top: auto;
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: auto;
+    max-height: min(76vh, 640px);
+    border-radius: 14px;
+    transform: translateY(calc(100% + 24px));
+  }
+
+  body:not(.empty-mode):not(.sidebar-collapsed) aside.panel {
+    transform: translateY(0);
+  }
+
+  .settings-menu {
+    position: fixed;
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    top: auto;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    width: auto;
+  }
+
+  body:not(.empty-mode) .topbar .plan-upload-button,
+  body:not(.empty-mode) .topbar #reanalyzeButton,
+  body:not(.empty-mode) .topbar #undoButton,
+  body:not(.empty-mode) .topbar #redoButton,
+  body:not(.empty-mode) .topbar #sidebarToggleButton,
+  body:not(.empty-mode) .topbar #settingsButton,
+  body:not(.empty-mode) .topbar #recalibrateButton,
+  body:not(.empty-mode) .topbar .export-menu-wrap #exportMenuButton {
+    width: 100% !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    flex: 0 1 auto !important;
+    justify-content: center;
+  }
+
+  body:not(.empty-mode) .topbar #undoButton,
+  body:not(.empty-mode) .topbar #redoButton,
+  body:not(.empty-mode) .topbar #sidebarToggleButton,
+  body:not(.empty-mode) .topbar #settingsButton {
+    padding: 0 !important;
+  }
+}
+
+.mobile-label {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  body:not(.empty-mode) .topbar {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-auto-rows: 54px;
+    gap: 8px;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  body:not(.empty-mode) .topbar .tool-button,
+  body:not(.empty-mode) .topbar .icon-button,
+  body:not(.empty-mode) .topbar #settingsButton,
+  body:not(.empty-mode) .topbar .export-menu-wrap #exportMenuButton,
+  body:not(.empty-mode) .topbar .plan-upload-button,
+  body:not(.empty-mode) .topbar #reanalyzeButton,
+  body:not(.empty-mode) .topbar #recalibrateButton,
+  body:not(.empty-mode) .topbar #sidebarToggleButton,
+  body:not(.empty-mode) .topbar #undoButton,
+  body:not(.empty-mode) .topbar #redoButton {
+    width: 100% !important;
+    height: 54px !important;
+    min-height: 54px !important;
+    padding: 6px 4px !important;
+    flex: 0 1 auto !important;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  body:not(.empty-mode) .topbar .button-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+  }
+
+  body:not(.empty-mode) .topbar .desktop-label {
+    display: none !important;
+  }
+
+  body:not(.empty-mode) .topbar .mobile-label,
+  body:not(.empty-mode) .topbar .plan-upload-button > span,
+  body:not(.empty-mode) .topbar #exportMenuButton > span {
+    display: block !important;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: currentColor;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  body:not(.empty-mode) .plan-upload-button {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #reanalyzeButton {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #recalibrateButton {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #sidebarToggleButton {
+    grid-column: 4 !important;
+    grid-row: 1 !important;
+    top: 0 !important;
+    transform: none !important;
+  }
+
+  body:not(.empty-mode) #undoButton {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    margin-left: 0 !important;
+  }
+
+  body:not(.empty-mode) #redoButton {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+  }
+
+  body:not(.empty-mode) .export-menu-wrap {
+    grid-column: 3 !important;
+    grid-row: 2 !important;
+    width: 100%;
+  }
+
+  body:not(.empty-mode) .settings-menu-wrap {
+    grid-column: 4 !important;
+    grid-row: 2 !important;
+    width: 100%;
+  }
+}
+
+/* Final mobile toolbar cleanup: icon-only, no measurements shortcut. */
+body:not(.empty-mode) #sidebarToggleButton {
+  display: none !important;
+}
+
+body:not(.empty-mode) .topbar {
+  z-index: 120;
+}
+
+body:not(.empty-mode) .export-menu,
+body:not(.empty-mode) .settings-menu {
+  z-index: 130;
+}
+
+@media (max-width: 760px) {
+  body:not(.empty-mode) .topbar {
+    grid-template-columns: repeat(7, minmax(38px, 44px)) !important;
+    grid-auto-rows: auto !important;
+    justify-content: space-between;
+    gap: clamp(4px, 1.5vw, 8px);
+    padding: 9px 10px;
+    backdrop-filter: none;
+  }
+
+  body:not(.empty-mode) .topbar .tool-button,
+  body:not(.empty-mode) .topbar .icon-button,
+  body:not(.empty-mode) .topbar #settingsButton,
+  body:not(.empty-mode) .topbar .export-menu-wrap #exportMenuButton,
+  body:not(.empty-mode) .topbar .plan-upload-button,
+  body:not(.empty-mode) .topbar #reanalyzeButton,
+  body:not(.empty-mode) .topbar #recalibrateButton,
+  body:not(.empty-mode) .topbar #undoButton,
+  body:not(.empty-mode) .topbar #redoButton {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    aspect-ratio: 1 / 1;
+    padding: 0 !important;
+    border-radius: 8px;
+    flex-direction: row;
+    gap: 0;
+  }
+
+  body:not(.empty-mode) .topbar .button-icon {
+    width: 19px;
+    height: 19px;
+    flex: 0 0 19px;
+  }
+
+  body:not(.empty-mode) .topbar span,
+  body:not(.empty-mode) .topbar .desktop-label,
+  body:not(.empty-mode) .topbar .mobile-label,
+  body:not(.empty-mode) .topbar .plan-upload-button > span,
+  body:not(.empty-mode) .topbar #exportMenuButton > span {
+    display: none !important;
+  }
+
+  body:not(.empty-mode) .plan-upload-button {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #reanalyzeButton {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #recalibrateButton {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #undoButton {
+    grid-column: 4 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #redoButton {
+    grid-column: 5 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) .export-menu-wrap {
+    grid-column: 6 !important;
+    grid-row: 1 !important;
+    width: 100%;
+  }
+
+  body:not(.empty-mode) .settings-menu-wrap {
+    grid-column: 7 !important;
+    grid-row: 1 !important;
+    width: 100%;
+  }
+}

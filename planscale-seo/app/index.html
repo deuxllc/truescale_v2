@@ -5,17 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>TrueScale</title>
     <meta name="description" content="TrueScale — онлайн-инструмент для измерения реальных размеров по изображениям. Загрузите план, чертеж, карту или фото, задайте масштаб и измеряйте прямо в браузере." />
-    <link rel="canonical" href="https://deuxllc.github.io/plan-scale/planscale-seo/app/" />
+    <link rel="canonical" href="https://deuxllc.github.io/truescale_v2/planscale-seo/app/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="TrueScale" />
     <meta property="og:title" content="TrueScale — измерение по изображениям" />
     <meta property="og:description" content="Загрузите план, чертеж, карту или фото, задайте масштаб и измеряйте реальные размеры прямо в браузере." />
-    <meta property="og:url" content="https://deuxllc.github.io/plan-scale/planscale-seo/app/" />
-    <meta property="og:image" content="https://deuxllc.github.io/plan-scale/planscale-seo/brand/truescale-og.png" />
+    <meta property="og:url" content="https://deuxllc.github.io/truescale_v2/planscale-seo/app/" />
+    <meta property="og:image" content="https://deuxllc.github.io/truescale_v2/planscale-seo/brand/truescale-og.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="TrueScale — измерение по изображениям" />
     <meta name="twitter:description" content="Загрузите изображение, задайте масштаб и измеряйте реальные размеры прямо в браузере." />
-    <meta name="twitter:image" content="https://deuxllc.github.io/plan-scale/planscale-seo/brand/truescale-og.png" />
+    <meta name="twitter:image" content="https://deuxllc.github.io/truescale_v2/planscale-seo/brand/truescale-og.png" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -129,8 +129,22 @@
         <path d="M12 17.2v.1" />
       </symbol>
       <symbol id="icon-settings" viewBox="0 0 24 24">
-        <path d="M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Z" />
-        <path d="M19.1 13.4c.1-.5.1-.9 0-1.4l1.6-1.2-1.8-3.1-1.9.8c-.4-.3-.8-.5-1.2-.7L15.5 5h-3.6l-.3 2c-.5.2-.9.4-1.2.7l-1.9-.8-1.8 3.1 1.6 1.2c-.1.5-.1.9 0 1.4L6.7 14l1.8 3.1 1.9-.8c.4.3.8.5 1.2.7l.3 2h3.6l.3-2c.5-.2.9-.4 1.2-.7l1.9.8 1.8-3.1Z" />
+        <path d="M4 7h5" />
+        <path d="M13 7h7" />
+        <circle cx="11" cy="7" r="2" />
+        <path d="M4 12h9" />
+        <path d="M17 12h3" />
+        <circle cx="15" cy="12" r="2" />
+        <path d="M4 17h3" />
+        <path d="M11 17h9" />
+        <circle cx="9" cy="17" r="2" />
+      </symbol>
+      <symbol id="icon-scale" viewBox="0 0 24 24">
+        <path d="M5 18 18 5" />
+        <path d="m7 16 2 2" />
+        <path d="m10 13 2 2" />
+        <path d="m13 10 2 2" />
+        <path d="m16 7 2 2" />
       </symbol>
       <symbol id="icon-undo" viewBox="0 0 24 24">
         <path d="M9 7 5 11l4 4" />
@@ -139,6 +153,14 @@
       <symbol id="icon-redo" viewBox="0 0 24 24">
         <path d="m15 7 4 4-4 4" />
         <path d="M19 11h-8.3A5.2 5.2 0 1 0 15 19" />
+      </symbol>
+      <symbol id="icon-measurements" viewBox="0 0 24 24">
+        <path d="M5 6h14" />
+        <path d="M5 12h14" />
+        <path d="M5 18h10" />
+        <path d="M8 4v4" />
+        <path d="M16 10v4" />
+        <path d="M11 16v4" />
       </symbol>
     </svg>
 
@@ -160,7 +182,11 @@
       <section class="workspace" aria-label="Рабочая область изображения">
         <div class="topbar">
           <div class="toolbar-group plan-group">
-            <button id="sidebarToggleButton" class="icon-button sidebar-toggle-button" type="button" title="Показать измерения" aria-label="Показать измерения">☰</button>
+            <button id="sidebarToggleButton" class="tool-button sidebar-toggle-button" type="button" title="Показать измерения" aria-label="Показать измерения">
+              <svg class="button-icon"><use href="#icon-measurements"></use></svg>
+              <span class="desktop-label">Измерения</span>
+              <span class="mobile-label">Список</span>
+            </button>
             <label class="file-button tool-button plan-upload-button" title="Загрузить изображение">
               <input id="imageInput" type="file" accept="image/*" />
               <svg class="button-icon"><use href="#icon-upload"></use></svg>
@@ -169,38 +195,11 @@
             <button id="removeUnderlayButton" class="tool-button icon-only toggle-tool" type="button" title="Убрать загруженную подложку, оставив разметку" aria-label="Скрыть подложку" aria-pressed="false">
               <svg class="button-icon"><use href="#icon-hide-image"></use></svg>
             </button>
-            <button id="reanalyzeButton" class="tool-button icon-only reanalyze-button" type="button" title="Заново найти отрезки на плане" aria-label="Заново найти отрезки на плане">
+            <button id="reanalyzeButton" class="tool-button reanalyze-button" type="button" title="Найти линии на плане" aria-label="Найти линии на плане">
               <svg class="button-icon"><use href="#icon-reanalyze"></use></svg>
+              <span class="desktop-label">Найти линии</span>
+              <span class="mobile-label">Линии</span>
             </button>
-          </div>
-
-          <div class="toolbar-group compact segment-tools-group" aria-label="Инструменты измерений">
-            <button id="selectModeButton" class="tool-button icon-only toggle-tool" type="button" title="Выбор и редактирование" aria-label="Выбор и редактирование" aria-pressed="true">
-              <svg class="button-icon"><use href="#icon-select"></use></svg>
-            </button>
-            <button
-              id="drawSegmentButton"
-              class="tool-button icon-only toggle-tool"
-              type="button"
-              aria-pressed="false"
-              aria-label="Добавить отрезок"
-              title="Добавить отрезок"
-            >
-              <svg class="button-icon"><use href="#icon-add-segment"></use></svg>
-            </button>
-            <button id="drawAreaButton" class="tool-button icon-only toggle-tool" type="button" title="Измерить площадь" aria-label="Измерить площадь" aria-pressed="false">
-              <svg class="button-icon"><use href="#icon-area"></use></svg>
-            </button>
-            <button id="clearButton" class="icon-button danger" type="button" title="Удалить выбранный отрезок" aria-label="Удалить выбранный отрезок">
-              <svg class="button-icon"><use href="#icon-trash"></use></svg>
-            </button>
-            <button id="toggleAllFootnotesButton" class="tool-button icon-only toggle-tool footnote-toggle" type="button" aria-pressed="true" title="Скрыть сноски всех отрезков" aria-label="Скрыть сноски всех отрезков">
-              <svg class="button-icon"><use href="#icon-footnote"></use></svg>
-            </button>
-            <label class="toolbar-toggle snap-toggle icon-only" title="Ортогональный режим: горизонтали, вертикали и выравнивание по точкам">
-              <input id="smartGridToggle" type="checkbox" />
-              <span><svg class="button-icon"><use href="#icon-ortho"></use></svg></span>
-            </label>
           </div>
 
           <div class="toolbar-group measure-group">
@@ -211,7 +210,9 @@
               title="Изменить масштаб проекта"
               aria-label="Перекалибровать масштаб проекта"
             >
-              Перекалибровать
+              <svg class="button-icon"><use href="#icon-scale"></use></svg>
+              <span class="desktop-label">Перекалибровать</span>
+              <span class="mobile-label">Масштаб</span>
             </button>
             <div class="toolbar-field reference-storage" aria-label="Размер базового отрезка" hidden>
               <span>Базовый размер</span>
@@ -236,9 +237,11 @@
           <div class="toolbar-group compact history-group">
             <button id="undoButton" class="icon-button history-button" type="button" title="Отменить действие" aria-label="Отменить действие">
               <svg class="button-icon"><use href="#icon-undo"></use></svg>
+              <span class="mobile-label">Назад</span>
             </button>
             <button id="redoButton" class="icon-button history-button" type="button" title="Вернуть действие" aria-label="Вернуть действие">
               <svg class="button-icon"><use href="#icon-redo"></use></svg>
+              <span class="mobile-label">Вперед</span>
             </button>
           </div>
 
@@ -249,6 +252,7 @@
             <div class="settings-menu-wrap">
               <button id="settingsButton" class="tool-button icon-only" type="button" title="Настройки проекта" aria-label="Настройки проекта" aria-haspopup="true" aria-expanded="false">
                 <svg class="button-icon"><use href="#icon-settings"></use></svg>
+                <span class="mobile-label">Настр.</span>
               </button>
               <div class="settings-menu" id="settingsMenu" role="menu" hidden>
                 <strong>Настройки</strong>
@@ -272,6 +276,13 @@
                   <input id="settingsFootnotesInput" type="checkbox" checked />
                   <span>Показывать сноски</span>
                 </label>
+                <div class="settings-danger-zone" aria-label="Опасные действия">
+                  <span>Проект</span>
+                  <button id="resetPlanButton" class="tool-button reset-top-button danger" type="button" title="Сбросить изображение, разметку и базовый размер">
+                    <svg class="button-icon"><use href="#icon-trash"></use></svg>
+                    <span>Сбросить проект</span>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="export-menu-wrap">
@@ -314,10 +325,6 @@
                 </button>
               </div>
             </div>
-            <button id="resetPlanButton" class="tool-button reset-top-button danger" type="button" title="Сбросить изображение, разметку и базовый размер">
-              <svg class="button-icon"><use href="#icon-trash"></use></svg>
-              <span>Сброс</span>
-            </button>
           </div>
 
           <span class="status" id="statusText">Загрузите изображение</span>
@@ -354,6 +361,35 @@
             <button id="confirmBaseButton" class="primary-action" type="button">Подтвердить</button>
             <button id="cancelBaseButton" type="button">Отмена</button>
           </div>
+        </div>
+
+        <div class="toolbar-group compact segment-tools-group" aria-label="Инструменты измерений">
+          <button id="selectModeButton" class="tool-button icon-only toggle-tool" type="button" title="Выбор и редактирование" aria-label="Выбор и редактирование" aria-pressed="true">
+            <svg class="button-icon"><use href="#icon-select"></use></svg>
+          </button>
+          <button
+            id="drawSegmentButton"
+            class="tool-button icon-only toggle-tool"
+            type="button"
+            aria-pressed="false"
+            aria-label="Добавить отрезок"
+            title="Добавить отрезок"
+          >
+            <svg class="button-icon"><use href="#icon-add-segment"></use></svg>
+          </button>
+          <button id="drawAreaButton" class="tool-button icon-only toggle-tool" type="button" title="Измерить площадь" aria-label="Измерить площадь" aria-pressed="false">
+            <svg class="button-icon"><use href="#icon-area"></use></svg>
+          </button>
+          <button id="clearButton" class="icon-button danger" type="button" title="Удалить выбранный отрезок" aria-label="Удалить выбранный отрезок">
+            <svg class="button-icon"><use href="#icon-trash"></use></svg>
+          </button>
+          <button id="toggleAllFootnotesButton" class="tool-button icon-only toggle-tool footnote-toggle" type="button" aria-pressed="true" title="Скрыть сноски всех отрезков" aria-label="Скрыть сноски всех отрезков">
+            <svg class="button-icon"><use href="#icon-footnote"></use></svg>
+          </button>
+          <label class="toolbar-toggle snap-toggle icon-only" title="Ортогональный режим: горизонтали, вертикали и выравнивание по точкам">
+            <input id="smartGridToggle" type="checkbox" />
+            <span><svg class="button-icon"><use href="#icon-ortho"></use></svg></span>
+          </label>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">

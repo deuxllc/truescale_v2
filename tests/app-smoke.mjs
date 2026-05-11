@@ -185,6 +185,36 @@ async function runCase(browser, origin, profile) {
   await page.locator("#nextActionPanel").waitFor({ state: "visible", timeout: 6000 });
 
   const sensitivityHiddenInitially = await page.locator("#detectionSensitivityControl").evaluate((node) => node.hidden);
+  const measurementsShortcutHidden = await page.locator("#sidebarToggleButton").evaluate((node) => getComputedStyle(node).display === "none");
+  const resetLivesInSettings = await page.locator("#resetPlanButton").evaluate((node) => node.closest("#settingsMenu")?.id === "settingsMenu");
+  const mobileTopbarAligned = profile.isMobile
+    ? await page.evaluate(() => {
+      const selectors = [
+        ".plan-upload-button",
+        "#reanalyzeButton",
+        "#recalibrateButton",
+        "#undoButton",
+        "#redoButton",
+        "#exportMenuButton",
+        "#settingsButton",
+      ];
+      const rects = selectors.map((selector) => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return {
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          y: Math.round(rect.y),
+        };
+      });
+      const widths = new Set(rects.map((rect) => rect.width));
+      const heights = new Set(rects.map((rect) => rect.height));
+      const rows = new Set(rects.map((rect) => rect.y));
+      return widths.size === 1
+        && heights.size === 1
+        && rows.size === 1
+        && rects.every((rect) => rect.width >= 38 && rect.height >= 38);
+    })
+    : true;
   await page.locator("#detectModeButton").click();
   const sensitivityVisibleAuto = await page.locator("#detectionSensitivityControl").evaluate((node) => !node.hidden);
   const sliderValue = await page.locator("#detectionSensitivityInput").inputValue();
@@ -241,10 +271,12 @@ async function runCase(browser, origin, profile) {
   await page.mouse.click(snapStartPoint.x, snapStartPoint.y + 150);
 
   await page.locator("#drawAreaButton").click();
+  const polygonCanvasBox = await page.locator("#planCanvas").boundingBox();
+  if (!polygonCanvasBox) throw new Error("Canvas wrapper disappeared before polygon test");
   const polygonPoints = [
-    { x: activeCanvasBox.x + activeCanvasBox.width * 0.24, y: activeCanvasBox.y + activeCanvasBox.height * 0.58 },
-    { x: activeCanvasBox.x + activeCanvasBox.width * 0.58, y: activeCanvasBox.y + activeCanvasBox.height * 0.58 },
-    { x: activeCanvasBox.x + activeCanvasBox.width * 0.42, y: activeCanvasBox.y + activeCanvasBox.height * 0.76 },
+    { x: polygonCanvasBox.x + polygonCanvasBox.width * 0.24, y: polygonCanvasBox.y + polygonCanvasBox.height * 0.58 },
+    { x: polygonCanvasBox.x + polygonCanvasBox.width * 0.58, y: polygonCanvasBox.y + polygonCanvasBox.height * 0.58 },
+    { x: polygonCanvasBox.x + polygonCanvasBox.width * 0.42, y: polygonCanvasBox.y + polygonCanvasBox.height * 0.76 },
   ];
   for (const point of polygonPoints) {
     await page.mouse.click(point.x, point.y);
@@ -269,6 +301,9 @@ async function runCase(browser, origin, profile) {
     sensitivityHiddenInitially,
     sensitivityVisibleAuto,
     sliderValue,
+    measurementsShortcutHidden,
+    resetLivesInSettings,
+    mobileTopbarAligned,
     toolbarRecalibrateVisible,
     toolbarBaseFieldVisible,
     inlineHasBaseLabel,
@@ -301,6 +336,9 @@ try {
     !result.sensitivityHiddenInitially ||
     !result.sensitivityVisibleAuto ||
     result.sliderValue !== "15" ||
+    !result.measurementsShortcutHidden ||
+    !result.resetLivesInSettings ||
+    !result.mobileTopbarAligned ||
     !result.toolbarRecalibrateVisible ||
     result.toolbarBaseFieldVisible ||
     result.inlineHasBaseLabel ||
