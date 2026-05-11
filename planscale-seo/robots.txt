@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /plan-scale/planscale-seo/
+Sitemap: https://deuxllc.github.io/plan-scale/planscale-seo/sitemap.xml

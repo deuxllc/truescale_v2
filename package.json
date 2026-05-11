@@ -1,0 +1,13 @@
+{
+  "name": "truescale-static-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/check-syntax.mjs && node tests/app-smoke.mjs",
+    "test:syntax": "node tests/check-syntax.mjs",
+    "test:smoke": "node tests/app-smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.1"
+  }
+}
