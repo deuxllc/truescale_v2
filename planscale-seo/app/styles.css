@@ -5210,3 +5210,103 @@ body:not(.empty-mode) .settings-menu {
     width: 100%;
   }
 }
+
+body:not(.empty-mode) #selectModeButton {
+  display: none !important;
+}
+
+.recalibrate-button,
+body:not(.empty-mode) #recalibrateButton,
+.reset-top-button,
+.settings-danger-zone .reset-top-button {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+body:not(.empty-mode) #recalibrateButton {
+  border-color: rgba(215, 222, 232, 0.95) !important;
+  box-shadow: none !important;
+}
+
+body:not(.empty-mode) #recalibrateButton:focus-visible {
+  border-color: rgba(37, 99, 235, 0.42) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+
+.inline-calibration {
+  grid-template-columns: 84px 58px 70px !important;
+  width: min(226px, calc(100% - 20px)) !important;
+  gap: 5px !important;
+  padding: 5px !important;
+  border-radius: 9px !important;
+}
+
+.inline-calibration input,
+.inline-calibration select,
+.inline-calibration button {
+  height: 32px !important;
+  min-height: 32px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+.inline-calibration input {
+  padding-inline: 9px !important;
+}
+
+.inline-calibration button {
+  border-color: rgba(37, 99, 235, 0.92) !important;
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.18) !important;
+}
+
+.settings-menu {
+  width: 292px;
+  gap: 9px;
+}
+
+.settings-row {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.settings-slider-row {
+  grid-template-columns: 92px minmax(0, 1fr) 42px;
+}
+
+@media (min-width: 980px) {
+  body:not(.empty-mode) .segment-tools-group {
+    grid-template-columns: 40px !important;
+  }
+}
+
+@media (max-width: 760px) {
+  body:not(.empty-mode) .segment-tools-group {
+    grid-template-columns: repeat(3, 46px) !important;
+  }
+
+  body:not(.empty-mode) #drawSegmentButton {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #drawAreaButton {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) #toggleAllFootnotesButton {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+  }
+
+  body:not(.empty-mode) .settings-menu {
+    max-height: min(72vh, 560px);
+    overflow: auto;
+  }
+
+  body:not(.empty-mode) #recalibrateButton {
+    font-size: 0 !important;
+  }
+}

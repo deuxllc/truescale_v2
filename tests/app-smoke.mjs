@@ -273,10 +273,14 @@ async function runCase(browser, origin, profile) {
   await page.locator("#drawAreaButton").click();
   const polygonCanvasBox = await page.locator("#planCanvas").boundingBox();
   if (!polygonCanvasBox) throw new Error("Canvas wrapper disappeared before polygon test");
+  const toScreenPoint = (point) => ({
+    x: polygonCanvasBox.x + fittedOffset.x + point.x * fittedImageScale,
+    y: polygonCanvasBox.y + fittedOffset.y + point.y * fittedImageScale,
+  });
   const polygonPoints = [
-    { x: polygonCanvasBox.x + polygonCanvasBox.width * 0.24, y: polygonCanvasBox.y + polygonCanvasBox.height * 0.58 },
-    { x: polygonCanvasBox.x + polygonCanvasBox.width * 0.58, y: polygonCanvasBox.y + polygonCanvasBox.height * 0.58 },
-    { x: polygonCanvasBox.x + polygonCanvasBox.width * 0.42, y: polygonCanvasBox.y + polygonCanvasBox.height * 0.76 },
+    toScreenPoint({ x: 560, y: 320 }),
+    toScreenPoint({ x: 650, y: 340 }),
+    toScreenPoint({ x: 620, y: 410 }),
   ];
   for (const point of polygonPoints) {
     await page.mouse.click(point.x, point.y);
@@ -291,6 +295,47 @@ async function runCase(browser, origin, profile) {
     && Math.abs(segment.startY - firstSegment.startY) < 0.01
   )));
   const polygonCreated = Boolean((exportJson.polygons || []).length === 1 && exportJson.polygons[0].area > 0);
+  let polygonMoved = false;
+  if (polygonCreated) {
+    const polygon = exportJson.polygons[0];
+    const centroid = polygon.points.reduce((sum, point) => ({
+      x: sum.x + point.x / polygon.points.length,
+      y: sum.y + point.y / polygon.points.length,
+    }), { x: 0, y: 0 });
+    const polygonDragStart = {
+      x: activeCanvasBox.x + fittedOffset.x + centroid.x * fittedImageScale,
+      y: activeCanvasBox.y + fittedOffset.y + centroid.y * fittedImageScale,
+    };
+    await page.mouse.move(polygonDragStart.x, polygonDragStart.y);
+    await page.mouse.down();
+    await page.mouse.move(polygonDragStart.x + 44, polygonDragStart.y + 28, { steps: 6 });
+    await page.mouse.up();
+    const movedJson = await exportJsonPayload();
+    const movedPolygon = movedJson.polygons?.[0];
+    polygonMoved = Boolean(movedPolygon && Math.hypot(
+      movedPolygon.points[0].x - polygon.points[0].x,
+      movedPolygon.points[0].y - polygon.points[0].y,
+    ) > 8);
+  }
+
+  const baseMidpoint = baseSegment
+    ? {
+      x: activeCanvasBox.x + fittedOffset.x + ((baseSegment.startX + baseSegment.endX) / 2) * fittedImageScale,
+      y: activeCanvasBox.y + fittedOffset.y + ((baseSegment.startY + baseSegment.endY) / 2) * fittedImageScale,
+    }
+    : null;
+  let baseScalePreservedAfterDelete = false;
+  if (baseMidpoint) {
+    await page.mouse.click(baseMidpoint.x, baseMidpoint.y);
+    await page.keyboard.press("Delete");
+    const afterDeleteJson = await exportJsonPayload();
+    baseScalePreservedAfterDelete = Boolean(
+      afterDeleteJson.baseValue === 5
+      && afterDeleteJson.basePixelLength > 0
+      && afterDeleteJson.baseSegmentId === null
+      && afterDeleteJson.segments?.some((segment) => segment.calculatedLength !== null),
+    );
+  }
 
   const bodyText = await page.locator("body").textContent();
   const exportStatus = await page.locator("#exportStatus").textContent();
@@ -309,9 +354,11 @@ async function runCase(browser, origin, profile) {
     inlineHasBaseLabel,
     inlineSubmitText,
     scaleRulerVisible,
-    segmentCreated: panelSummary.includes("3 измер"),
+    segmentCreated: (exportJson.segments || []).length >= 2,
     secondSegmentStartsFromExistingPoint: snappedSecondSegment,
     polygonCreated,
+    polygonMoved,
+    baseScalePreservedAfterDelete,
     exportReady: exportStatus?.includes("Экспорт готов") || false,
     hasTrueScale: bodyText.includes("TrueScale"),
     canvasSize: `${Math.round(canvasBox?.width || 0)}x${Math.round(canvasBox?.height || 0)}`,
@@ -347,6 +394,8 @@ try {
     !result.segmentCreated ||
     !result.secondSegmentStartsFromExistingPoint ||
     !result.polygonCreated ||
+    !result.polygonMoved ||
+    !result.baseScalePreservedAfterDelete ||
     !result.exportReady ||
     !result.hasTrueScale
   ));

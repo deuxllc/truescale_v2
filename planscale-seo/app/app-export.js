@@ -476,6 +476,14 @@
       }));
     }
 
+    function basePixelLength() {
+      const reference = state.segments.find((segment) => segment.id === state.referenceId);
+      if (reference) return Number(segmentLength(reference).toFixed(3));
+      return typeof state.referencePixelLength === "number" && state.referencePixelLength > 0
+        ? Number(state.referencePixelLength.toFixed(3))
+        : null;
+    }
+
     function exportCsv() {
       setExportMenuOpen(false);
       if (!state.segments.length && !(state.polygons || []).length) {
@@ -534,9 +542,14 @@
         app: "TrueScale",
         imageName: state.imageName,
         baseSegmentId: state.referenceId,
+        basePixelLength: basePixelLength(),
         baseValue: parseDecimal(state.referenceValue),
         unit: state.unit.trim(),
+        unitSystem: state.unitSystem,
         footnotesVisible: state.footnotesVisible,
+        measurementPrecision: state.measurementPrecision,
+        footnoteSize: state.footnoteSize,
+        showUnitsInFootnotes: state.showUnitsInFootnotes,
         segments: segmentExportRows(),
         polygons: polygonExportRows(),
       };
@@ -552,9 +565,14 @@
 
       const payload = {
         baseSegmentId: state.referenceId,
+        basePixelLength: basePixelLength(),
         baseValue: parseDecimal(state.referenceValue),
         unit: state.unit.trim(),
+        unitSystem: state.unitSystem,
         footnotesVisible: state.footnotesVisible,
+        measurementPrecision: state.measurementPrecision,
+        footnoteSize: state.footnoteSize,
+        showUnitsInFootnotes: state.showUnitsInFootnotes,
         segments: segmentExportRows(),
         polygons: polygonExportRows(),
       };

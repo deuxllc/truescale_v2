@@ -72,7 +72,11 @@ const {
   helpCloseButton,
   settingsButton,
   settingsMenu,
+  settingsUnitSystemInput,
   settingsUnitInput,
+  settingsPrecisionInput,
+  settingsFootnoteSizeInput,
+  settingsShowUnitsInput,
   settingsOpacityInput,
   settingsOpacityValue,
   settingsFootnotesInput,
@@ -150,11 +154,16 @@ const state = {
   segments: [],
   polygons: [],
   referenceId: null,
+  referencePixelLength: null,
   selectedSegmentIds: new Set(),
+  selectedPolygonIds: new Set(),
   referenceValue: "",
   unit: unitInput.value || "м",
   unitSystem: IMPERIAL_UNITS.has(unitInput.value) ? "imperial" : "metric",
   footnotesVisible: true,
+  measurementPrecision: 3,
+  footnoteSize: "normal",
+  showUnitsInFootnotes: true,
   pendingPoint: null,
   polygonPoints: [],
   polygonPreviewPoint: null,
@@ -190,7 +199,7 @@ const state = {
 };
 
 const POLYGON_SNAP_OPTIONS = {
-  axisFieldRadiusPx: 240,
+  axisFieldRadiusPx: Number.POSITIVE_INFINITY,
   axisTolerancePx: 11,
   endpointTolerancePx: 18,
   strongEndpointTolerancePx: 10,
@@ -276,6 +285,9 @@ function unitSystemForUnit(unit) {
 function updateUnitSystemControls() {
   metricUnitsButton?.setAttribute("aria-pressed", String(state.unitSystem !== "imperial"));
   imperialUnitsButton?.setAttribute("aria-pressed", String(state.unitSystem === "imperial"));
+  if (settingsUnitSystemInput instanceof HTMLSelectElement) {
+    settingsUnitSystemInput.value = state.unitSystem === "imperial" ? "imperial" : "metric";
+  }
 }
 
 function setProjectUnitSystem(system, { commit = false } = {}) {
@@ -317,6 +329,15 @@ function updateBackgroundOpacityControls() {
   if (settingsFootnotesInput) {
     settingsFootnotesInput.checked = state.footnotesVisible;
     settingsFootnotesInput.disabled = !state.segments.length && !state.polygons.length;
+  }
+  if (settingsPrecisionInput instanceof HTMLSelectElement) {
+    settingsPrecisionInput.value = String(state.measurementPrecision);
+  }
+  if (settingsFootnoteSizeInput instanceof HTMLSelectElement) {
+    settingsFootnoteSizeInput.value = state.footnoteSize;
+  }
+  if (settingsShowUnitsInput instanceof HTMLInputElement) {
+    settingsShowUnitsInput.checked = state.showUnitsInFootnotes;
   }
   if (toggleBackgroundOpacityButton) {
     toggleBackgroundOpacityButton.disabled = !state.image;
@@ -365,11 +386,16 @@ function snapshotState() {
     segments: state.segments.map(cloneSegment),
     polygons: state.polygons.map(clonePolygon),
     referenceId: state.referenceId,
+    referencePixelLength: state.referencePixelLength,
     selectedSegmentIds: getSelectedIds(),
+    selectedPolygonIds: getSelectedPolygonIds(),
     referenceValue: state.referenceValue,
     unit: state.unit,
     unitSystem: state.unitSystem,
     footnotesVisible: state.footnotesVisible,
+    measurementPrecision: state.measurementPrecision,
+    footnoteSize: state.footnoteSize,
+    showUnitsInFootnotes: state.showUnitsInFootnotes,
     smartGridEnabled: state.smartGridEnabled,
     detectionSensitivity: state.detectionSensitivity,
     workflowMode: state.workflowMode,
@@ -423,7 +449,11 @@ async function applySnapshot(snapshot) {
     }));
     state.polygons = (snapshot.polygons || []).map(clonePolygon);
     state.referenceId = snapshot.referenceId ?? null;
+    state.referencePixelLength = typeof snapshot.referencePixelLength === "number"
+      ? snapshot.referencePixelLength
+      : null;
     state.selectedSegmentIds = new Set(snapshot.selectedSegmentIds || []);
+    state.selectedPolygonIds = new Set(snapshot.selectedPolygonIds || []);
     state.referenceValue = snapshot.referenceValue || "";
     state.unit = snapshot.unit || "м";
     state.unitSystem = snapshot.unitSystem || unitSystemForUnit(state.unit);
@@ -432,6 +462,9 @@ async function applySnapshot(snapshot) {
       : (state.segments.length + state.polygons.length) === 0
         || state.segments.some((segment) => segment.labelHidden !== true)
         || state.polygons.some((polygon) => polygon.labelHidden !== true);
+    state.measurementPrecision = normalizePrecision(snapshot.measurementPrecision);
+    state.footnoteSize = normalizeFootnoteSize(snapshot.footnoteSize);
+    state.showUnitsInFootnotes = snapshot.showUnitsInFootnotes !== false;
     state.pendingPoint = null;
     state.polygonPoints = [];
     state.polygonPreviewPoint = null;
@@ -510,15 +543,23 @@ function restoreSharedStateFromHash() {
       labelHidden: item.labelHidden === true || item.footnoteVisible === false,
     })).filter((polygon) => polygon.points.length >= 3);
     state.referenceId = payload.baseSegmentId ?? state.segments[0]?.id ?? null;
+    state.referencePixelLength = typeof payload.basePixelLength === "number"
+      ? payload.basePixelLength
+      : getReferenceLengthFromSegments(state.referenceId);
     state.referenceValue = payload.baseValue ? String(payload.baseValue).replace(".", ",") : "";
     state.unit = payload.unit || state.unit || "м";
+    state.unitSystem = payload.unitSystem || unitSystemForUnit(state.unit);
     state.footnotesVisible = typeof payload.footnotesVisible === "boolean"
       ? payload.footnotesVisible
       : (state.segments.length + state.polygons.length) === 0
         || state.segments.some((segment) => segment.labelHidden !== true)
         || state.polygons.some((polygon) => polygon.labelHidden !== true);
+    state.measurementPrecision = normalizePrecision(payload.measurementPrecision);
+    state.footnoteSize = normalizeFootnoteSize(payload.footnoteSize);
+    state.showUnitsInFootnotes = payload.showUnitsInFootnotes !== false;
     state.selectedSegmentIds = new Set(state.referenceId ? [state.referenceId] : []);
-    state.isChoosingBase = !state.referenceId && state.segments.length > 0;
+    state.selectedPolygonIds = new Set();
+    state.isChoosingBase = !getReferenceLength() && state.segments.length > 0;
     nextSegmentId = Math.max(1, ...state.segments.map((segment) => segment.id + 1), 1);
     nextPolygonId = Math.max(1, ...state.polygons.map((polygon) => polygon.id + 1), 1);
     referenceLengthInput.value = state.referenceValue;
@@ -540,8 +581,18 @@ function isMobileLayout() {
   return window.matchMedia("(max-width: 760px)").matches;
 }
 
+function normalizePrecision(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 3;
+  return Math.min(3, Math.max(0, Math.round(parsed)));
+}
+
+function normalizeFootnoteSize(value) {
+  return ["compact", "normal", "large"].includes(value) ? value : "normal";
+}
+
 function hasCompleteBaseLength() {
-  return Boolean(state.referenceId && parseDecimal(state.referenceValue) !== null);
+  return Boolean(getReferenceLength() && parseDecimal(state.referenceValue) !== null);
 }
 
 function syncCalibrationPlacement() {
@@ -559,7 +610,7 @@ function updateHistoryButtons() {
   const hasSegments = state.segments.length > 0;
   const hasObjects = hasSegments || state.polygons.length > 0;
   const hasDetected = state.detectedSegments.length > 0;
-  const hasSelection = state.selectedSegmentIds.size > 0;
+  const hasSelection = state.selectedSegmentIds.size > 0 || state.selectedPolygonIds.size > 0;
   undoButton.disabled = historyState.undo.length <= 1;
   redoButton.disabled = historyState.redo.length === 0;
   removeUnderlayButton.disabled = !hasImage;
@@ -572,8 +623,8 @@ function updateHistoryButtons() {
   exportMenuButton.disabled = !hasImage;
   clearButton.disabled = !hasSelection;
   clearButton.title = hasSelection
-    ? "Удалить выбранный отрезок"
-    : "Сначала выберите отрезок";
+    ? "Удалить выбранное"
+    : "Сначала выберите объект";
   clearButton.setAttribute("aria-label", clearButton.title);
   if (toggleAllFootnotesButton) {
     toggleAllFootnotesButton.disabled = !hasObjects;
@@ -638,7 +689,7 @@ function updateToolControls() {
 
   updateAllFootnotesButtonState();
 
-  const hasBase = Boolean(state.referenceId);
+  const hasBase = Boolean(getReferenceLength());
   const hasSegments = state.segments.length > 0;
   referenceLengthInput.disabled = !hasBase;
   focusReferenceButton.hidden = !hasBase;
@@ -676,7 +727,7 @@ function updateGuidanceControls() {
     addDetectedButton.hidden = !hasCurrentMarkup;
   }
 
-  const needsBase = Boolean(state.image && !state.referenceId && !state.nextActionPromptVisible && (state.isDrawingSegments || state.segments.length));
+  const needsBase = Boolean(state.image && !getReferenceLength() && !state.nextActionPromptVisible && (state.isDrawingSegments || state.segments.length));
   const needsLength = Boolean(state.image && state.segments.length && state.referenceId && parseDecimal(state.referenceValue) === null);
   calibrationHint.hidden = !needsBase && !needsLength;
   if (needsBase) {
@@ -750,14 +801,14 @@ function realValueCandidates() {
 function syncScaleRuler() {
   if (!scaleRuler || !scaleRulerLine || !scaleRulerValue || !scaleRulerZoom) return;
 
-  const reference = state.segments.find((segment) => segment.id === state.referenceId);
   const referenceValue = parseDecimal(state.referenceValue);
-  if (!state.image || !reference || referenceValue === null || referenceValue <= 0) {
+  const referenceLength = getReferenceLength();
+  if (!state.image || !referenceLength || referenceValue === null || referenceValue <= 0) {
     scaleRuler.hidden = true;
     return;
   }
 
-  const pixelsPerUnit = segmentLength(reference) * state.scale / referenceValue;
+  const pixelsPerUnit = referenceLength * state.scale / referenceValue;
   if (!Number.isFinite(pixelsPerUnit) || pixelsPerUnit <= 0) {
     scaleRuler.hidden = true;
     return;
@@ -1111,6 +1162,32 @@ function findLabelAt(clientX, clientY) {
   return null;
 }
 
+function findPolygonLabelAt(clientX, clientY) {
+  const point = screenPointFromClient(clientX, clientY);
+
+  for (const [id, rect] of state.polygonLabelBounds.entries()) {
+    if (pointInsideRect(point, rect)) {
+      return state.polygons.find((polygon) => polygon.id === id) ?? null;
+    }
+  }
+
+  return null;
+}
+
+function findPolygonAt(clientX, clientY) {
+  const point = screenPointFromClient(clientX, clientY);
+
+  for (let index = state.polygons.length - 1; index >= 0; index--) {
+    const polygon = state.polygons[index];
+    const points = polygon.points.map(imageToScreen);
+    if (pointInsidePolygon(point, points)) {
+      return polygon;
+    }
+  }
+
+  return null;
+}
+
 function findEndpointAt(clientX, clientY) {
   const point = screenPointFromClient(clientX, clientY);
   let closest = null;
@@ -1400,16 +1477,30 @@ function isSegmentSelected(segment) {
   return state.selectedSegmentIds.has(segment.id);
 }
 
+function isPolygonSelected(polygon) {
+  return state.selectedPolygonIds.has(polygon.id);
+}
+
 function isCoarsePointer() {
   return window.matchMedia("(pointer: coarse)").matches;
 }
 
 function selectOnlySegment(id) {
   state.selectedSegmentIds = id === null ? new Set() : new Set([id]);
+  state.selectedPolygonIds = new Set();
 }
 
 function selectSegments(ids) {
   state.selectedSegmentIds = new Set(ids);
+}
+
+function selectPolygons(ids) {
+  state.selectedPolygonIds = new Set(ids);
+}
+
+function selectOnlyPolygon(id) {
+  state.selectedSegmentIds = new Set();
+  state.selectedPolygonIds = id === null ? new Set() : new Set([id]);
 }
 
 function toggleSegmentSelection(id) {
@@ -1420,10 +1511,12 @@ function toggleSegmentSelection(id) {
     selected.add(id);
   }
   state.selectedSegmentIds = selected;
+  state.selectedPolygonIds = new Set();
 }
 
 function clearSelection() {
   state.selectedSegmentIds = new Set();
+  state.selectedPolygonIds = new Set();
 }
 
 function adjustedEndpointDragPoint(event) {
@@ -1497,6 +1590,7 @@ function setReferenceSegment(id, { focusLength = true } = {}) {
   const previousReferenceId = state.referenceId;
   const changedReference = previousReferenceId !== id;
   state.referenceId = id;
+  state.referencePixelLength = getReferenceLengthFromSegments(id) || state.referencePixelLength;
   state.isChoosingBase = false;
   state.isEditingReferenceLength = true;
   if (changedReference) {
@@ -1541,7 +1635,7 @@ function requestReferenceConfirmation(id) {
 }
 
 function handleSegmentPick(id, { requireConfirmation = false } = {}) {
-  if (state.isChoosingBase || !state.referenceId) {
+  if (state.isChoosingBase || !getReferenceLength()) {
     if (requireConfirmation && requestReferenceConfirmation(id)) {
       showToast("Подтвердите базовый отрезок");
       return true;
@@ -1562,6 +1656,10 @@ function confirmPendingReference() {
 
 function getSelectedIds() {
   return [...state.selectedSegmentIds];
+}
+
+function getSelectedPolygonIds() {
+  return [...state.selectedPolygonIds];
 }
 
 function segmentIntersectsRect(segment, rect) {
@@ -1597,9 +1695,70 @@ function segmentIdsInsideSelectionBox() {
     .map((segment) => segment.id);
 }
 
-function getReferenceLength() {
-  const reference = state.segments.find((segment) => segment.id === state.referenceId);
+function pointInsidePolygon(point, points) {
+  if (!Array.isArray(points) || points.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const current = points[i];
+    const previous = points[j];
+    const intersects = ((current.y > point.y) !== (previous.y > point.y))
+      && (point.x < (previous.x - current.x) * (point.y - current.y) / ((previous.y - current.y) || 0.000001) + current.x);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function polygonIntersectsRect(polygon, rect) {
+  const points = polygon.points.map(imageToScreen);
+  if (points.some((point) => pointInsideRect(point, rect))) return true;
+
+  const center = {
+    x: (rect.left + rect.right) / 2,
+    y: (rect.top + rect.bottom) / 2,
+  };
+  if (pointInsidePolygon(center, points)) return true;
+
+  const topLeft = { x: rect.left, y: rect.top };
+  const topRight = { x: rect.right, y: rect.top };
+  const bottomRight = { x: rect.right, y: rect.bottom };
+  const bottomLeft = { x: rect.left, y: rect.bottom };
+  const rectEdges = [
+    [topLeft, topRight],
+    [topRight, bottomRight],
+    [bottomRight, bottomLeft],
+    [bottomLeft, topLeft],
+  ];
+
+  for (let index = 0; index < points.length; index++) {
+    const start = points[index];
+    const end = points[(index + 1) % points.length];
+    if (rectEdges.some(([edgeStart, edgeEnd]) => lineSegmentsIntersect(start, end, edgeStart, edgeEnd))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function polygonIdsInsideSelectionBox() {
+  if (!state.selectionBox) return [];
+  const rect = normalizedRect(state.selectionBox.start, state.selectionBox.end);
+  return state.polygons
+    .filter((polygon) => polygonIntersectsRect(polygon, rect))
+    .map((polygon) => polygon.id);
+}
+
+function getReferenceLengthFromSegments(referenceId) {
+  const reference = state.segments.find((segment) => segment.id === referenceId);
   return reference ? segmentLength(reference) : 0;
+}
+
+function getReferenceLength() {
+  const referenceLength = getReferenceLengthFromSegments(state.referenceId);
+  if (referenceLength) return referenceLength;
+  return typeof state.referencePixelLength === "number" && state.referencePixelLength > 0
+    ? state.referencePixelLength
+    : 0;
 }
 
 function ratioFor(segment) {
@@ -1634,10 +1793,14 @@ function materializeDetectedSegments(append = false) {
   const detected = state.detectedSegments.map(cloneDetectedSegment);
   const reference = state.segments.find((segment) => segment.id === state.referenceId);
   const referenceValue = state.referenceValue;
+  const referencePixelLength = getReferenceLength();
   if (!append) {
     state.segments = reference ? [cloneSegment(reference)] : [];
     state.referenceId = reference ? reference.id : null;
-    state.referenceValue = reference ? referenceValue : "";
+    state.referencePixelLength = reference
+      ? segmentLength(reference)
+      : (referencePixelLength || state.referencePixelLength);
+    state.referenceValue = reference || state.referencePixelLength ? referenceValue : "";
     referenceLengthInput.value = state.referenceValue;
     nextSegmentId = Math.max(1, ...state.segments.map((segment) => segment.id + 1), 1);
     clearSelection();
@@ -1655,11 +1818,13 @@ function materializeDetectedSegments(append = false) {
   });
 
   state.segments.push(...created);
-  if (!state.referenceId) {
+  if (!getReferenceLength()) {
     state.isChoosingBase = true;
     clearSelection();
-  } else {
+  } else if (state.referenceId) {
     selectOnlySegment(state.referenceId);
+  } else {
+    clearSelection();
   }
   state.detectedSegments = [];
   state.pendingPoint = null;
@@ -1814,9 +1979,15 @@ function cancelAnalysis() {
 }
 
 function formatLength(value, includeUnit = true) {
-  const formatted = formatDecimal(value);
+  const formatted = formatMeasurementValue(value);
   if (formatted === "—" || !includeUnit || !state.unit.trim()) return formatted;
   return `${formatted} ${state.unit.trim()}`;
+}
+
+function formatMeasurementValue(value) {
+  if (value === null || !Number.isFinite(Number(value))) return "—";
+  const precision = normalizePrecision(state.measurementPrecision);
+  return Number(value).toFixed(precision).replace(".", ",");
 }
 
 function formatScaleRulerLength(value, unit) {
@@ -1868,10 +2039,9 @@ function polygonCentroid(polygon) {
 }
 
 function polygonAreaFor(polygon) {
-  const reference = state.segments.find((segment) => segment.id === state.referenceId);
   const referenceValue = parseDecimal(state.referenceValue);
-  if (!reference || referenceValue === null || referenceValue <= 0) return null;
-  const referencePx = segmentLength(reference);
+  if (referenceValue === null || referenceValue <= 0) return null;
+  const referencePx = getReferenceLength();
   if (!referencePx) return null;
   const unitsPerPixel = referenceValue / referencePx;
   return polygonAreaPx(polygon.points) * unitsPerPixel * unitsPerPixel;
@@ -1884,7 +2054,8 @@ function isPolygonFootnoteVisible(polygon) {
 function areaLabelTextFor(polygon) {
   const area = polygonAreaFor(polygon);
   if (area === null) return polygon.name;
-  return `${formatDecimal(area)} ${areaUnitLabel()}`;
+  const value = formatMeasurementValue(area);
+  return state.showUnitsInFootnotes ? `${value} ${areaUnitLabel()}` : value;
 }
 
 function isSegmentFootnoteVisible(segment) {
@@ -1940,7 +2111,7 @@ function labelTextFor(segment) {
   if (calculatedLength === null && state.segments.length) {
     return segment.name;
   }
-  return formatLength(calculatedLength);
+  return formatLength(calculatedLength, state.showUnitsInFootnotes);
 }
 
 function getLabelOffset(segment, labelWidth, labelHeight) {
@@ -2033,6 +2204,11 @@ function drawHandle(point, color, radius = 5) {
   ctx.stroke();
 }
 
+function footnoteFontSize(baseSize) {
+  const delta = state.footnoteSize === "large" ? 2 : state.footnoteSize === "compact" ? -1 : 0;
+  return Math.max(9, baseSize + delta);
+}
+
 function drawSegment(segment) {
   const start = imageToScreen(segment.start);
   const end = imageToScreen(segment.end);
@@ -2076,7 +2252,7 @@ function drawSegment(segment) {
   }
 
   const label = labelTextFor(segment);
-  const labelFontSize = state.scale > 3 ? 9 : 11;
+  const labelFontSize = footnoteFontSize(state.scale > 3 ? 9 : 11);
   ctx.font = `400 ${labelFontSize}px 'DM Sans', Inter, system-ui, sans-serif`;
   const metrics = ctx.measureText(label);
   const labelWidth = metrics.width + 12;
@@ -2124,7 +2300,7 @@ function drawPolygonLabel(polygon) {
 
   const label = areaLabelTextFor(polygon);
   const center = imageToScreen(polygonCentroid(polygon));
-  const labelFontSize = state.scale > 3 ? 10 : 12;
+  const labelFontSize = footnoteFontSize(state.scale > 3 ? 10 : 12);
   ctx.font = `500 ${labelFontSize}px 'DM Sans', Inter, system-ui, sans-serif`;
   const width = ctx.measureText(label).width + 16;
   const height = Math.max(20, labelFontSize + 9);
@@ -2153,6 +2329,7 @@ function drawPolygonLabel(polygon) {
 function drawPolygon(polygon) {
   if (!polygon.points?.length) return;
 
+  const isSelected = isPolygonSelected(polygon);
   ctx.save();
   ctx.beginPath();
   for (let index = 0; index < polygon.points.length; index++) {
@@ -2164,14 +2341,14 @@ function drawPolygon(polygon) {
     }
   }
   ctx.closePath();
-  ctx.fillStyle = CANVAS_COLORS.areaFill;
-  ctx.strokeStyle = CANVAS_COLORS.area;
-  ctx.lineWidth = 2.2;
+  ctx.fillStyle = isSelected ? "rgba(37, 99, 235, 0.1)" : CANVAS_COLORS.areaFill;
+  ctx.strokeStyle = isSelected ? CANVAS_COLORS.selected : CANVAS_COLORS.area;
+  ctx.lineWidth = isSelected ? 3 : 2.2;
   ctx.fill();
   ctx.stroke();
 
   for (const point of polygon.points) {
-    drawHandle(point, CANVAS_COLORS.area, 4.8);
+    drawHandle(point, isSelected ? CANVAS_COLORS.selected : CANVAS_COLORS.area, isSelected ? 5.8 : 4.8);
   }
   ctx.restore();
 
@@ -2187,9 +2364,11 @@ function drawPendingPolygon() {
   }
 
   ctx.save();
-  ctx.strokeStyle = state.polygonCloseTarget || state.orthogonalGuide
-    ? CANVAS_COLORS.area
-    : "rgba(15, 143, 115, 0.58)";
+  ctx.strokeStyle = state.orthogonalGuide
+    ? CANVAS_COLORS.angle
+    : state.polygonCloseTarget
+      ? CANVAS_COLORS.area
+      : "rgba(15, 143, 115, 0.58)";
   ctx.fillStyle = "rgba(15, 143, 115, 0.08)";
   ctx.lineWidth = 2;
   ctx.setLineDash([7, 6]);
@@ -2632,7 +2811,7 @@ function renderPanelSummary() {
   if (!panelSummary) return;
 
   const count = state.segments.length + state.polygons.length;
-  const base = state.referenceId ? "база выбрана" : "база не выбрана";
+  const base = hasCompleteBaseLength() ? "масштаб задан" : "масштаб не задан";
   const unit = state.unit.trim() || "без единицы";
   panelSummary.textContent = `${count} ${plural(count, "измерение", "измерения", "измерений")} · ${base} · ${unit}`;
 }
@@ -2642,6 +2821,13 @@ function renderBaseSummary() {
 
   const reference = state.segments.find((segment) => segment.id === state.referenceId);
   if (!reference) {
+    const realValue = parseDecimal(state.referenceValue);
+    if (state.referencePixelLength && realValue !== null) {
+      baseSegmentName.textContent = "Масштаб задан";
+      baseSegmentMeta.textContent = `${formatLength(realValue)} · ${formatMeasurementValue(state.referencePixelLength)} px на изображении`;
+      baseSegmentName.classList.remove("pending");
+      return;
+    }
     baseSegmentName.textContent = "Не выбран";
     baseSegmentMeta.textContent = state.segments.length
       ? "Выберите известный отрезок на изображении или в списке."
@@ -2654,8 +2840,8 @@ function renderBaseSummary() {
   baseSegmentName.textContent = reference.name;
   baseSegmentName.classList.remove("pending");
   baseSegmentMeta.textContent = realValue === null
-    ? `${formatDecimal(segmentLength(reference))} px · введите реальную длину`
-    : `${formatLength(realValue)} · ${formatDecimal(segmentLength(reference))} px на изображении`;
+    ? `${formatMeasurementValue(segmentLength(reference))} px · введите реальную длину`
+    : `${formatLength(realValue)} · ${formatMeasurementValue(segmentLength(reference))} px на изображении`;
 }
 
 function renderSegments() {
@@ -2701,7 +2887,7 @@ function segmentsSummaryText() {
   }
   for (const polygon of state.polygons) {
     const area = polygonAreaFor(polygon);
-    lines.push(`Площадь;${polygon.name};;${formatDecimal(area)}`);
+    lines.push(`Площадь;${polygon.name};;${formatMeasurementValue(area)}`);
   }
   return lines.join("\n");
 }
@@ -2738,9 +2924,9 @@ function updateStatus() {
   const drawingState = state.isDrawingSegments ? " · добавление отрезков" : "";
   const areaState = state.isDrawingArea ? " · измерение площади" : "";
   const choosingState = state.nextActionPromptVisible ? " · выберите режим" : "";
-  const baseState = !state.referenceId && !state.nextActionPromptVisible
+  const baseState = !getReferenceLength() && !state.nextActionPromptVisible
     ? " · задайте масштаб"
-    : state.referenceId && parseDecimal(state.referenceValue) === null
+    : getReferenceLength() && parseDecimal(state.referenceValue) === null
       ? " · введите базовый размер"
       : "";
   statusText.textContent = `Изображение готово${detectedState}${choosingState}${baseState}${underlayState}${drawingState}${areaState}`;
@@ -2793,8 +2979,9 @@ function addPoint(point) {
   };
 
   state.segments.push(segment);
-  if (!state.referenceId) {
+  if (!getReferenceLength()) {
     state.referenceId = id;
+    state.referencePixelLength = segmentLength(segment);
     state.referenceValue = "";
     referenceLengthInput.value = "";
     if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = "";
@@ -2870,17 +3057,18 @@ function deleteSegments(ids) {
   const idsToDelete = new Set(ids);
   if (!idsToDelete.size) return;
 
+  const deletedReferenceLength = idsToDelete.has(state.referenceId)
+    ? getReferenceLengthFromSegments(state.referenceId)
+    : 0;
   state.segments = state.segments.filter((segment) => !idsToDelete.has(segment.id));
   if (state.segments.length || state.polygons.length) {
     state.footnotesVisible = visibleFootnoteCount() > 0;
   }
   if (idsToDelete.has(state.referenceId)) {
+    state.referencePixelLength = deletedReferenceLength || state.referencePixelLength;
     state.referenceId = null;
-    state.referenceValue = "";
     state.isEditingReferenceLength = false;
-    referenceLengthInput.value = "";
-    if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = "";
-    state.isChoosingBase = state.segments.length > 0;
+    state.isChoosingBase = false;
   }
   if (idsToDelete.has(state.pendingReferenceId)) {
     hideBaseConfirmation();
@@ -2888,6 +3076,41 @@ function deleteSegments(ids) {
   selectSegments(getSelectedIds().filter((id) => !idsToDelete.has(id)));
   updateAll();
   commitHistory();
+}
+
+function deleteSelectedObjects() {
+  const segmentIds = getSelectedIds();
+  const polygonIds = getSelectedPolygonIds();
+  if (!segmentIds.length && !polygonIds.length) {
+    showToast("Выберите объект для удаления");
+    return;
+  }
+
+  const deletedReferenceLength = segmentIds.includes(state.referenceId)
+    ? getReferenceLengthFromSegments(state.referenceId)
+    : 0;
+  const segmentIdSet = new Set(segmentIds);
+  const polygonIdSet = new Set(polygonIds);
+
+  state.segments = state.segments.filter((segment) => !segmentIdSet.has(segment.id));
+  state.polygons = state.polygons.filter((polygon) => !polygonIdSet.has(polygon.id));
+  if (segmentIdSet.has(state.referenceId)) {
+    state.referencePixelLength = deletedReferenceLength || state.referencePixelLength;
+    state.referenceId = null;
+    state.isEditingReferenceLength = false;
+    state.isChoosingBase = false;
+  }
+  if (segmentIdSet.has(state.pendingReferenceId)) {
+    hideBaseConfirmation();
+  }
+  clearSelection();
+  if (state.segments.length || state.polygons.length) {
+    state.footnotesVisible = visibleFootnoteCount() > 0;
+  }
+  updateAll();
+  commitHistory();
+  const count = segmentIds.length + polygonIds.length;
+  showToast(count === 1 ? "Объект удалён" : `Удалено: ${count}`);
 }
 
 function resetPlan() {
@@ -2898,6 +3121,9 @@ function resetPlan() {
   analysisRunId++;
   const rememberedUnit = state.unit || "м";
   const rememberedUnitSystem = state.unitSystem || unitSystemForUnit(rememberedUnit);
+  const rememberedPrecision = state.measurementPrecision;
+  const rememberedFootnoteSize = state.footnoteSize;
+  const rememberedShowUnits = state.showUnitsInFootnotes;
   state.image = null;
   state.imageSrc = "";
   state.imageName = "";
@@ -2912,12 +3138,17 @@ function resetPlan() {
   state.polygons = [];
   state.detectedSegments = [];
   state.referenceId = null;
+  state.referencePixelLength = null;
   state.selectedSegmentIds = new Set();
+  state.selectedPolygonIds = new Set();
   state.referenceValue = "";
   state.isEditingReferenceLength = false;
   state.unit = rememberedUnit;
   state.unitSystem = rememberedUnitSystem;
   state.footnotesVisible = true;
+  state.measurementPrecision = rememberedPrecision;
+  state.footnoteSize = rememberedFootnoteSize;
+  state.showUnitsInFootnotes = rememberedShowUnits;
   state.pendingPoint = null;
   state.polygonPoints = [];
   state.polygonPreviewPoint = null;
@@ -3000,6 +3231,7 @@ function loadImageFile(file) {
         state.segments = [];
         state.polygons = [];
         state.referenceId = null;
+        state.referencePixelLength = null;
         state.referenceValue = "";
         state.isEditingReferenceLength = false;
         referenceLengthInput.value = "";
@@ -3135,13 +3367,7 @@ undoButton.addEventListener("click", undoHistory);
 redoButton.addEventListener("click", redoHistory);
 
 clearButton.addEventListener("click", () => {
-  const selectedIds = getSelectedIds();
-  if (!selectedIds.length) {
-    showToast("Выберите отрезок для удаления");
-    return;
-  }
-  deleteSegments(selectedIds);
-  showToast(selectedIds.length === 1 ? "Отрезок удалён" : `Удалено: ${selectedIds.length}`);
+  deleteSelectedObjects();
 });
 
 copyButton.addEventListener("click", async () => {
@@ -3245,11 +3471,17 @@ welcomeStartButton.addEventListener("click", dismissWelcome);
 
 referenceLengthInput.addEventListener("input", () => {
   state.referenceValue = referenceLengthInput.value;
+  if (parseDecimal(state.referenceValue) !== null) {
+    state.referencePixelLength = getReferenceLength() || state.referencePixelLength;
+  }
   if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = state.referenceValue;
   updateAll();
 });
 referenceLengthInput.addEventListener("change", () => {
   state.referenceValue = referenceLengthInput.value;
+  if (parseDecimal(state.referenceValue) !== null) {
+    state.referencePixelLength = getReferenceLength() || state.referencePixelLength;
+  }
   if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = state.referenceValue;
   updateAll();
   commitHistory();
@@ -3260,6 +3492,7 @@ unitInput.addEventListener("input", () => {
   state.unitSystem = unitSystemForUnit(state.unit);
   if (inlineUnitInput) inlineUnitInput.value = state.unit;
   if (settingsUnitInput) settingsUnitInput.value = state.unit;
+  updateUnitSystemControls();
   updateAll();
 });
 unitInput.addEventListener("change", () => {
@@ -3267,6 +3500,7 @@ unitInput.addEventListener("change", () => {
   state.unitSystem = unitSystemForUnit(state.unit);
   if (inlineUnitInput) inlineUnitInput.value = state.unit;
   if (settingsUnitInput) settingsUnitInput.value = state.unit;
+  updateUnitSystemControls();
   updateAll();
   commitHistory();
 });
@@ -3277,6 +3511,29 @@ settingsUnitInput?.addEventListener("change", () => {
   state.unit = settingsUnitInput.value;
   state.unitSystem = unitSystemForUnit(state.unit);
   setUnitInputValue(state.unit);
+  updateUnitSystemControls();
+  updateAll();
+  commitHistory();
+});
+
+settingsUnitSystemInput?.addEventListener("change", () => {
+  setProjectUnitSystem(settingsUnitSystemInput.value, { commit: Boolean(state.image || state.segments.length || state.polygons.length) });
+});
+
+settingsPrecisionInput?.addEventListener("change", () => {
+  state.measurementPrecision = normalizePrecision(settingsPrecisionInput.value);
+  updateAll();
+  commitHistory();
+});
+
+settingsFootnoteSizeInput?.addEventListener("change", () => {
+  state.footnoteSize = normalizeFootnoteSize(settingsFootnoteSizeInput.value);
+  updateAll();
+  commitHistory();
+});
+
+settingsShowUnitsInput?.addEventListener("change", () => {
+  state.showUnitsInFootnotes = settingsShowUnitsInput.checked;
   updateAll();
   commitHistory();
 });
@@ -3335,6 +3592,7 @@ inlineCalibration?.addEventListener("submit", (event) => {
     return;
   }
   state.referenceValue = value;
+  state.referencePixelLength = getReferenceLength() || state.referencePixelLength;
   referenceLengthInput.value = value;
   state.unit = inlineUnitInput?.value || state.unit;
   state.unitSystem = unitSystemForUnit(state.unit);
@@ -3460,6 +3718,8 @@ canvas.addEventListener("pointerdown", (event) => {
   const hitEndpoint = findEndpointAt(event.clientX, event.clientY);
   const hitLabel = hitEndpoint ? null : findLabelAt(event.clientX, event.clientY);
   const hitSegment = hitEndpoint || hitLabel ? null : findSegmentAt(event.clientX, event.clientY);
+  const hitPolygonLabel = hitEndpoint || hitLabel || hitSegment ? null : findPolygonLabelAt(event.clientX, event.clientY);
+  const hitPolygon = hitEndpoint || hitLabel || hitSegment || hitPolygonLabel ? null : findPolygonAt(event.clientX, event.clientY);
   const touchInput = event.pointerType === "touch";
   const touchBasePick = touchInput
     && state.isChoosingBase
@@ -3470,7 +3730,9 @@ canvas.addEventListener("pointerdown", (event) => {
     && !state.isDrawingSegments
     && !hitEndpoint
     && !hitLabel
-    && !hitSegment;
+    && !hitSegment
+    && !hitPolygonLabel
+    && !hitPolygon;
   const wantsPan = event.button === 1 || state.isSpacePressed || touchEmptyPan;
 
   state.isDragging = true;
@@ -3511,6 +3773,11 @@ canvas.addEventListener("pointerdown", (event) => {
       state.interactionMode = "segment";
     }
     state.pendingPoint = null;
+  } else if (hitPolygonLabel || hitPolygon) {
+    const polygon = hitPolygonLabel || hitPolygon;
+    selectOnlyPolygon(polygon.id);
+    state.pendingPoint = null;
+    state.interactionMode = "polygon";
   } else {
     state.interactionMode = "select";
   }
@@ -3524,6 +3791,10 @@ canvas.addEventListener("pointerdown", (event) => {
     endpoint: hitEndpoint,
     labelSegment: hitLabel,
     hitSegment: hitLabel || hitSegment,
+    polygon: hitPolygonLabel || hitPolygon,
+    polygonPoints: hitPolygonLabel || hitPolygon
+      ? (hitPolygonLabel || hitPolygon).points.map(clonePoint)
+      : null,
     labelOffset: hitLabel ? currentLabelOffset(hitLabel) : { x: 0, y: -36 },
   };
   scheduleTouchContextMenu(hitLabel || hitSegment, event);
@@ -3613,6 +3884,14 @@ canvas.addEventListener("pointermove", (event) => {
         y: state.dragStart.labelOffset.y + dy,
       };
       draw();
+    } else if (state.interactionMode === "polygon" && state.dragStart.polygon && state.dragStart.polygonPoints) {
+      const imageDx = dx / Math.max(state.scale, 0.001);
+      const imageDy = dy / Math.max(state.scale, 0.001);
+      state.dragStart.polygon.points = state.dragStart.polygonPoints.map((point) => ({
+        x: point.x + imageDx,
+        y: point.y + imageDy,
+      }));
+      draw();
     } else if (state.interactionMode === "draw-line" && state.pendingPoint) {
       const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
       const resolved = resolveEndpointPoint(rawPoint, state.pendingPoint, null);
@@ -3647,6 +3926,7 @@ canvas.addEventListener("pointermove", (event) => {
         end: screenPointFromClient(event.clientX, event.clientY),
       };
       selectSegments(segmentIdsInsideSelectionBox());
+      selectPolygons(polygonIdsInsideSelectionBox());
     }
 
     draw();
@@ -3679,6 +3959,8 @@ canvas.addEventListener("pointerup", (event) => {
   const hadSelectionBox = Boolean(state.selectionBox);
   const hitLabel = wasClick ? findLabelAt(event.clientX, event.clientY) : null;
   const hitSegment = wasClick && !hitLabel ? findSegmentAt(event.clientX, event.clientY) : null;
+  const hitPolygonLabel = wasClick && !hitLabel && !hitSegment ? findPolygonLabelAt(event.clientX, event.clientY) : null;
+  const hitPolygon = wasClick && !hitLabel && !hitSegment && !hitPolygonLabel ? findPolygonAt(event.clientX, event.clientY) : null;
   const completedMode = state.interactionMode;
   const completedDragStart = state.dragStart;
   const shouldAddPoint = state.isDrawingSegments && wasClick && (
@@ -3706,6 +3988,11 @@ canvas.addEventListener("pointerup", (event) => {
     if (state.didDrag) {
       commitHistory();
     }
+  } else if (completedMode === "polygon") {
+    updateAll();
+    if (state.didDrag) {
+      commitHistory();
+    }
   } else if (completedMode === "segment" && !wasClick) {
     state.selectionBox = null;
     state.pendingPoint = null;
@@ -3718,7 +4005,7 @@ canvas.addEventListener("pointerup", (event) => {
   } else if (completedMode === "pan" || completedMode === "base-pick") {
     scheduleViewSave();
   } else if (hadSelectionBox) {
-    const selectedCount = state.selectedSegmentIds.size;
+    const selectedCount = state.selectedSegmentIds.size + state.selectedPolygonIds.size;
     state.selectionBox = null;
     state.pendingPoint = null;
     updateAll();
@@ -3738,6 +4025,10 @@ canvas.addEventListener("pointerup", (event) => {
     } else {
       selectOnlySegment(hitId);
     }
+    state.pendingPoint = null;
+    updateAll();
+  } else if (hitPolygonLabel || hitPolygon) {
+    selectOnlyPolygon((hitPolygonLabel || hitPolygon).id);
     state.pendingPoint = null;
     updateAll();
   }
@@ -3904,7 +4195,7 @@ window.addEventListener("keydown", (event) => {
   }
 
   if (event.key === "Escape") {
-    if (state.pendingPoint || state.isDrawingSegments || state.isDrawingArea || state.selectedSegmentIds.size) {
+    if (state.pendingPoint || state.isDrawingSegments || state.isDrawingArea || state.selectedSegmentIds.size || state.selectedPolygonIds.size) {
       cancelPendingLine();
       cancelPendingPolygon();
       state.selectionBox = null;
@@ -3940,10 +4231,9 @@ window.addEventListener("keydown", (event) => {
     return;
   }
 
-  const selectedIds = getSelectedIds();
-  if (selectedIds.length) {
+  if (state.selectedSegmentIds.size || state.selectedPolygonIds.size) {
     event.preventDefault();
-    deleteSegments(selectedIds);
+    deleteSelectedObjects();
   }
 });
 
