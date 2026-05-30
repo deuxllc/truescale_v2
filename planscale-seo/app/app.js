@@ -62,6 +62,9 @@ const {
   createResizeController,
 } = window.PlanScaleResize;
 const {
+  createPointerTracker,
+} = window.PlanScalePointerTracker;
+const {
   canvas,
   wrap,
   appShell,
@@ -202,8 +205,7 @@ let nextPolygonId = 1;
 let analysisRunId = 0;
 let activeContextSegmentId = null;
 let viewSaveTimer = 0;
-const activePointers = new Map();
-let pinchGesture = null;
+const pointerTracker = createPointerTracker();
 let longPressTimer = 0;
 let longPressSegment = null;
 let touchContextMenuOpened = false;
@@ -1036,20 +1038,6 @@ function zoomAtClientPoint(clientX, clientY, factor) {
   canvasView.zoomAtClientPoint(clientX, clientY, factor);
 }
 
-function pointerPairMetrics() {
-  const pointers = Array.from(activePointers.values()).slice(0, 2);
-  if (pointers.length < 2) return null;
-  const [first, second] = pointers;
-  const center = {
-    x: (first.clientX + second.clientX) / 2,
-    y: (first.clientY + second.clientY) / 2,
-  };
-  return {
-    center,
-    distance: Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY),
-  };
-}
-
 function clearLongPressTimer() {
   window.clearTimeout(longPressTimer);
   longPressTimer = 0;
@@ -1090,29 +1078,19 @@ function safeReleasePointerCapture(pointerId) {
 }
 
 function startPinchGesture() {
-  const metrics = pointerPairMetrics();
+  const metrics = pointerTracker.pairMetrics();
   if (!metrics || metrics.distance < 1) return;
-  pinchGesture = {
-    distance: metrics.distance,
-  };
+  pointerTracker.startPinch(metrics.distance);
   clearLongPressTimer();
   resetTransientGestureState("pinch");
 }
 
 function updatePointerFromEvent(event) {
-  if (event.pointerType !== "touch") return;
-  activePointers.set(event.pointerId, {
-    clientX: event.clientX,
-    clientY: event.clientY,
-  });
+  pointerTracker.updateFromEvent(event);
 }
 
 function removePointerFromEvent(event) {
-  if (event.pointerType !== "touch") return;
-  activePointers.delete(event.pointerId);
-  if (activePointers.size < 2) {
-    pinchGesture = null;
-  }
+  pointerTracker.removeFromEvent(event);
 }
 
 function scheduleTouchContextMenu(segment, event) {
@@ -1121,7 +1099,7 @@ function scheduleTouchContextMenu(segment, event) {
   const { clientX, clientY } = event;
   longPressSegment = segment;
   longPressTimer = window.setTimeout(() => {
-    if (!longPressSegment || activePointers.size > 1) return;
+    if (!longPressSegment || pointerTracker.activeCount() > 1) return;
     selectOnlySegment(longPressSegment.id);
     resetTransientGestureState(null);
     touchContextMenuOpened = true;
@@ -3180,7 +3158,7 @@ canvas.addEventListener("pointerdown", (event) => {
   if (!state.image) return;
   updatePointerFromEvent(event);
   safeSetPointerCapture(event.pointerId);
-  if (event.pointerType === "touch" && activePointers.size >= 2) {
+  if (event.pointerType === "touch" && pointerTracker.activeCount() >= 2) {
     event.preventDefault();
     startPinchGesture();
     updateAll();
@@ -3310,13 +3288,13 @@ canvas.addEventListener("pointerdown", (event) => {
 
 canvas.addEventListener("pointermove", (event) => {
   updatePointerFromEvent(event);
-  if (pinchGesture && event.pointerType === "touch" && activePointers.size >= 2) {
+  if (pointerTracker.hasPinch() && event.pointerType === "touch" && pointerTracker.activeCount() >= 2) {
     event.preventDefault();
-    const metrics = pointerPairMetrics();
+    const metrics = pointerTracker.pairMetrics();
     if (metrics && metrics.distance >= 1) {
-      const factor = metrics.distance / Math.max(pinchGesture.distance, 1);
+      const factor = metrics.distance / Math.max(pointerTracker.currentPinchDistance(), 1);
       zoomAtClientPoint(metrics.center.x, metrics.center.y, factor);
-      pinchGesture.distance = metrics.distance;
+      pointerTracker.updatePinchDistance(metrics.distance);
       draw();
       scheduleViewSave();
     }
@@ -3451,7 +3429,7 @@ canvas.addEventListener("pointerup", (event) => {
     draw();
     return;
   }
-  if (pinchGesture || state.interactionMode === "pinch") {
+  if (pointerTracker.hasPinch() || state.interactionMode === "pinch") {
     resetTransientGestureState(null);
     state.lastPointerUpAt = performance.now();
     scheduleViewSave();
@@ -3576,7 +3554,7 @@ canvas.addEventListener("pointerleave", () => {
 canvas.addEventListener("pointercancel", (event) => {
   clearLongPressTimer();
   removePointerFromEvent(event);
-  if (state.interactionMode === "pinch" || activePointers.size === 0) {
+  if (state.interactionMode === "pinch" || pointerTracker.activeCount() === 0) {
     resetTransientGestureState(null);
     draw();
   }
