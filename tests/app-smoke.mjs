@@ -305,6 +305,16 @@ async function runCase(browser, origin, profile) {
     && Math.abs(segment.startY - firstSegment.startY) < 0.01
   )));
   const polygonCreated = Boolean((exportJson.polygons || []).length === 1 && exportJson.polygons[0].area > 0);
+  const undoShortcut = process.platform === "darwin" ? "Meta+Z" : "Control+Z";
+  const redoShortcut = process.platform === "darwin" ? "Meta+Shift+Z" : "Control+Shift+Z";
+  await page.keyboard.press(undoShortcut);
+  const afterKeyboardUndoJson = await exportJsonPayload();
+  await page.keyboard.press(redoShortcut);
+  const afterKeyboardRedoJson = await exportJsonPayload();
+  const keyboardUndoRedo = Boolean(
+    (afterKeyboardUndoJson.polygons || []).length === 0
+    && (afterKeyboardRedoJson.polygons || []).length === 1,
+  );
   let polygonMoved = false;
   if (polygonCreated) {
     const polygon = exportJson.polygons[0];
@@ -405,6 +415,7 @@ async function runCase(browser, origin, profile) {
     segmentCreated: (exportJson.segments || []).length >= 2,
     secondSegmentStartsFromExistingPoint: snappedSecondSegment,
     polygonCreated,
+    keyboardUndoRedo,
     polygonMoved,
     baseScalePreservedAfterDelete,
     exportReady: exportStatus?.includes("Экспорт готов") || false,
@@ -445,6 +456,7 @@ try {
     !result.segmentCreated ||
     !result.secondSegmentStartsFromExistingPoint ||
     !result.polygonCreated ||
+    !result.keyboardUndoRedo ||
     !result.polygonMoved ||
     !result.baseScalePreservedAfterDelete ||
     !result.exportReady ||
