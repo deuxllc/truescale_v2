@@ -59,6 +59,9 @@ const {
   createKeyboardController,
 } = window.PlanScaleKeyboard;
 const {
+  createResizeController,
+} = window.PlanScaleResize;
+const {
   canvas,
   wrap,
   appShell,
@@ -198,7 +201,6 @@ let nextSegmentId = 1;
 let nextPolygonId = 1;
 let analysisRunId = 0;
 let activeContextSegmentId = null;
-let resizeTimer = 0;
 let viewSaveTimer = 0;
 const activePointers = new Map();
 let pinchGesture = null;
@@ -307,6 +309,14 @@ createKeyboardController({
     showToast,
     undoHistory,
     updateAll,
+    updateToolControls,
+  },
+});
+createResizeController({
+  wrap,
+  actions: {
+    resizeCanvas,
+    syncCalibrationPlacement,
     updateToolControls,
   },
 });
@@ -3603,29 +3613,6 @@ smartGridToggle.addEventListener("change", () => {
   updateAll();
   commitHistory();
 });
-
-window.addEventListener("resize", () => {
-  window.clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => {
-    syncCalibrationPlacement();
-    updateToolControls();
-    resizeCanvas();
-  }, 50);
-});
-
-window.visualViewport?.addEventListener("resize", () => {
-  window.clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => {
-    syncCalibrationPlacement();
-    updateToolControls();
-    resizeCanvas();
-  }, 50);
-});
-
-if (typeof ResizeObserver !== "undefined") {
-  const canvasResizeObserver = new ResizeObserver(() => resizeCanvas());
-  canvasResizeObserver.observe(wrap);
-}
 
 resizeCanvas();
 initWelcome();

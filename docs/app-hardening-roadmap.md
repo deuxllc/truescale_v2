@@ -8,7 +8,7 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 
 - Static browser app with no backend.
 - Browser scripts still load through ordered `<script>` tags and `window.PlanScale...` namespaces.
-- Domain code is now split into dedicated modules for geometry, measurement, dialogs, project format, canvas view transforms, canvas rendering, keyboard shortcuts, detection, snapping, export, and the segments panel.
+- Domain code is now split into dedicated modules for geometry, measurement, dialogs, project format, canvas view transforms, canvas rendering, keyboard shortcuts, resize handling, detection, snapping, export, and the segments panel.
 - `app.js` remains the orchestration layer for canvas interaction, state transitions, history, and UI synchronization.
 
 ## Implemented In This Cycle
@@ -21,7 +21,7 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 - Added normalized meter and square-meter values to data export.
 - Added `.truescale.json` project export/import through `PlanScaleProjectFormat`.
 - Replaced browser `prompt()` and `confirm()` with app-owned modal dialogs.
-- Extracted app state, history snapshots, canvas view transforms, canvas rendering, and keyboard shortcuts into dedicated modules.
+- Extracted app state, history snapshots, canvas view transforms, canvas rendering, keyboard shortcuts, and resize handling into dedicated modules.
 - Removed stale DOM references for missing `fitButton` and `resultOutput`.
 - Removed the disabled right-angle drawing branch while preserving right-angle coloring metadata.
 - Expanded syntax, unit, and smoke tests.

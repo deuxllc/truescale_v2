@@ -16,6 +16,7 @@ const files = [
   "planscale-seo/app/canvas-view.js",
   "planscale-seo/app/canvas-renderer.js",
   "planscale-seo/app/app-keyboard.js",
+  "planscale-seo/app/app-resize.js",
   "planscale-seo/app/snap.js",
   "planscale-seo/app/segments-panel.js",
   "planscale-seo/app/app.js",
