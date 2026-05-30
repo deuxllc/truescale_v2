@@ -25,14 +25,17 @@
       showToast,
       segmentLength,
       calculatedLengthFor,
+      calculatedLengthMetersFor,
       labelTextFor,
       areaLabelTextFor,
       polygonAreaFor,
+      polygonAreaSquareMetersFor,
       polygonCentroid,
       isSegmentFootnoteVisible,
       isPolygonFootnoteVisible,
       nearestPointOnRect,
       isGridAlignedSegment,
+      createProjectPayload,
     } = helpers;
 
     function colorForSegment(segment) {
@@ -442,9 +445,21 @@
       return safeExportName(extension, false);
     }
 
+    function projectExportName() {
+      const base = safeExportName("json", false).replace(/\.json$/, "");
+      return `${base}-project.truescale.json`;
+    }
+
+    function escapeCsvCell(value) {
+      const raw = String(value ?? "");
+      const safe = /^[=+\-@]/.test(raw.trimStart()) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    }
+
     function segmentExportRows() {
       return state.segments.map((segment) => {
         const calculated = calculatedLengthFor(segment);
+        const calculatedMeters = calculatedLengthMetersFor(segment);
         return {
           id: segment.id,
           name: segment.name,
@@ -452,6 +467,7 @@
           footnoteVisible: isSegmentFootnoteVisible(segment),
           lengthPx: Number(segmentLength(segment).toFixed(3)),
           calculatedLength: calculated === null ? null : Number(calculated.toFixed(3)),
+          calculatedLengthMeters: calculatedMeters === null ? null : Number(calculatedMeters.toFixed(6)),
           unit: state.unit.trim(),
           angle: segmentAngle(segment),
           startX: Number(segment.start.x.toFixed(3)),
@@ -468,6 +484,7 @@
         name: polygon.name,
         footnoteVisible: isPolygonFootnoteVisible(polygon),
         area: polygonAreaFor(polygon),
+        areaSquareMeters: polygonAreaSquareMetersFor(polygon),
         unit: state.unit.trim(),
         points: polygon.points.map((point) => ({
           x: Number(point.x.toFixed(3)),
@@ -491,15 +508,17 @@
         return;
       }
 
-      const header = "type;id;name;is_base;footnote_visible;length_px;calculated_length;area;unit;angle;start_x;start_y;end_x;end_y;points";
+      const header = "type;id;name;is_base;footnote_visible;length_px;calculated_length;calculated_length_meters;area;area_square_meters;unit;angle;start_x;start_y;end_x;end_y;points";
       const lines = segmentExportRows().map((row) => [
         "line",
         row.id,
-        `"${String(row.name).replace(/"/g, '""')}"`,
+        escapeCsvCell(row.name),
         row.isBase ? "yes" : "no",
         row.footnoteVisible ? "yes" : "no",
         row.lengthPx,
         row.calculatedLength ?? "",
+        row.calculatedLengthMeters ?? "",
+        "",
         "",
         row.unit,
         row.angle,
@@ -518,14 +537,16 @@
           row.footnoteVisible ? "yes" : "no",
           "",
           "",
+          "",
           row.area === null ? "" : Number(row.area.toFixed(3)),
+          row.areaSquareMeters === null ? "" : Number(row.areaSquareMeters.toFixed(6)),
           row.unit ? `${row.unit}2` : "",
           "",
           "",
           "",
           "",
           "",
-          `"${JSON.stringify(row.points).replace(/"/g, '""')}"`,
+          escapeCsvCell(JSON.stringify(row.points)),
         ].join(";"));
       }
       showExportLink(textDataUrl("text/csv", [header, ...lines].join("\n")), dataExportName("csv"));
@@ -544,6 +565,7 @@
         baseSegmentId: state.referenceId,
         basePixelLength: basePixelLength(),
         baseValue: parseDecimal(state.referenceValue),
+        baseValueMeters: state.referenceValueMeters ?? null,
         unit: state.unit.trim(),
         unitSystem: state.unitSystem,
         footnotesVisible: state.footnotesVisible,
@@ -554,6 +576,19 @@
         polygons: polygonExportRows(),
       };
       showExportLink(textDataUrl("application/json", JSON.stringify(payload, null, 2)), dataExportName("json"));
+    }
+
+    function exportProject() {
+      setExportMenuOpen(false);
+      const payload = createProjectPayload?.();
+      if (!payload) {
+        showToast("Сначала загрузите изображение или добавьте измерения");
+        return;
+      }
+      showExportLink(
+        textDataUrl("application/json", JSON.stringify(payload, null, 2)),
+        projectExportName(),
+      );
     }
 
     async function copyShareLink() {
@@ -567,6 +602,7 @@
         baseSegmentId: state.referenceId,
         basePixelLength: basePixelLength(),
         baseValue: parseDecimal(state.referenceValue),
+        baseValueMeters: state.referenceValueMeters ?? null,
         unit: state.unit.trim(),
         unitSystem: state.unitSystem,
         footnotesVisible: state.footnotesVisible,
@@ -676,6 +712,7 @@
       exportPdf,
       exportCsv,
       exportJson,
+      exportProject,
       copyShareLink,
       exportSvg,
     };

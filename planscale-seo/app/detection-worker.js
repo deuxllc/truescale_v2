@@ -1,4 +1,4 @@
-importScripts("app-config.js", "detection-core.js");
+importScripts("app-config.js", "geometry.js", "detection-core.js");
 
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "analyze") return;

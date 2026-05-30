@@ -8,9 +8,13 @@ const files = [
   "planscale-seo/app/detection-core.js",
   "planscale-seo/app/detection-worker.js",
   "planscale-seo/app/geometry.js",
+  "planscale-seo/app/measurement.js",
+  "planscale-seo/app/app-dialogs.js",
+  "planscale-seo/app/project-format.js",
   "planscale-seo/app/snap.js",
   "planscale-seo/app/segments-panel.js",
   "planscale-seo/app/app.js",
+  "tests/app-unit.mjs",
   "tests/app-smoke.mjs",
 ];
 

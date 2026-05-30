@@ -1369,6 +1369,58 @@ h2 {
   z-index: 10;
 }
 
+.app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(7px);
+}
+
+.app-dialog {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(215, 222, 232, 0.92);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow);
+}
+
+.app-dialog h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.app-dialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.app-dialog input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--ink);
+  font: inherit;
+}
+
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2827,10 +2879,6 @@ body.sidebar-collapsed:not(.empty-mode) .workspace {
   height: 17px;
 }
 
-#fitButton .button-icon {
-  stroke-width: 1.7;
-}
-
 #removeUnderlayButton .button-icon {
   width: 17px;
   height: 17px;
@@ -3094,7 +3142,6 @@ body.sidebar-collapsed:not(.empty-mode) .workspace {
   .tool-button.icon-only,
   .toolbar-toggle.icon-only,
   #removeUnderlayButton,
-  #fitButton,
   #drawSegmentButton,
   #reanalyzeButton,
   #clearButton,
@@ -4017,11 +4064,6 @@ body.sidebar-collapsed:not(.empty-mode) .workspace {
     grid-row: 1;
   }
 
-  #fitButton {
-    grid-column: 5;
-    grid-row: 1;
-  }
-
   #undoButton {
     grid-column: 8;
     grid-row: 1;
@@ -4110,7 +4152,6 @@ body.sidebar-collapsed:not(.empty-mode) .workspace {
   .topbar .tool-button.icon-only,
   .topbar .toolbar-toggle.icon-only,
   .topbar #removeUnderlayButton,
-  .topbar #fitButton,
   .topbar #drawSegmentButton,
   .topbar #reanalyzeButton,
   .topbar #clearButton,

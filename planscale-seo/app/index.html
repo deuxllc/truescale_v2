@@ -341,11 +341,20 @@
                   <strong>JSON</strong>
                   <small>структура сессии</small>
                 </button>
+                <button id="exportProjectButton" type="button" role="menuitem">
+                  <strong>Проект</strong>
+                  <small>файл .truescale.json</small>
+                </button>
+                <button id="importProjectButton" type="button" role="menuitem">
+                  <strong>Импорт проекта</strong>
+                  <small>открыть .truescale.json</small>
+                </button>
                 <button id="copyShareLinkButton" type="button" role="menuitem">
                   <strong>Ссылка</strong>
                   <small>разметка без изображения</small>
                 </button>
               </div>
+              <input id="projectImportInput" type="file" accept=".truescale.json,application/json" hidden />
             </div>
           </div>
 
@@ -562,11 +571,14 @@
     </main>
 
     <script src="app-config.js"></script>
+    <script src="geometry.js"></script>
     <script src="app-dom.js"></script>
     <script src="app-utils.js"></script>
+    <script src="measurement.js"></script>
+    <script src="app-dialogs.js"></script>
+    <script src="project-format.js"></script>
     <script src="app-export.js"></script>
     <script src="detection-core.js"></script>
-    <script src="geometry.js"></script>
     <script src="snap.js"></script>
     <script src="segments-panel.js"></script>
     <script src="app.js"></script>

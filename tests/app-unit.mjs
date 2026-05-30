@@ -1,0 +1,112 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+
+const context = vm.createContext({
+  window: {},
+  console,
+  btoa: (value) => Buffer.from(value, "binary").toString("base64"),
+  atob: (value) => Buffer.from(value, "base64").toString("binary"),
+});
+context.globalThis = context;
+
+for (const file of [
+  "planscale-seo/app/geometry.js",
+  "planscale-seo/app/app-utils.js",
+  "planscale-seo/app/measurement.js",
+  "planscale-seo/app/project-format.js",
+]) {
+  vm.runInContext(await readFile(file, "utf8"), context, { filename: file });
+}
+
+const geometry = context.window.PlanScaleGeometry;
+const utils = context.window.PlanScaleUtils;
+const measurement = context.window.PlanScaleMeasurement;
+const projectFormat = context.window.PlanScaleProjectFormat;
+
+assert.equal(utils.parseDecimal("12,5"), 12.5);
+assert.equal(utils.parseDecimal(" 1 200.25 "), 1200.25);
+assert.equal(utils.parseDecimal("0"), null);
+
+assert.equal(measurement.displayValueToMeters("500", "см"), 5);
+assert.equal(measurement.displayValueToMeters("5000", "мм"), 5);
+assert.equal(measurement.displayValueToMeters("0,005", "км"), 5);
+assert.equal(measurement.displayValueToMeters("196,8503937007874", "in"), 5);
+assert.equal(Number(measurement.metersToDisplayValue(5, "ft").toFixed(6)), 16.404199);
+assert.equal(measurement.formatDisplayInput(500), "500");
+assert.equal(measurement.formatDisplayInput(16.4041994751, 6), "16,404199");
+
+const base = { start: { x: 0, y: 0 }, end: { x: 100, y: 0 } };
+const double = { start: { x: 0, y: 0 }, end: { x: 200, y: 0 } };
+assert.equal(geometry.segmentLength(base), 100);
+assert.equal(measurement.segmentLengthMeters(double, 100, 5, geometry.segmentLength), 10);
+assert.equal(measurement.segmentLengthDisplay(double, 100, 5, "см", geometry.segmentLength), 1000);
+
+const square = [
+  { x: 0, y: 0 },
+  { x: 100, y: 0 },
+  { x: 100, y: 100 },
+  { x: 0, y: 100 },
+];
+function polygonAreaPx(points) {
+  let sum = 0;
+  for (let index = 0; index < points.length; index++) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    sum += current.x * next.y - next.x * current.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+assert.equal(measurement.polygonAreaSquareMeters(square, 100, 5, polygonAreaPx), 25);
+assert.equal(measurement.polygonAreaDisplay(square, 100, 5, "см", polygonAreaPx), 250000);
+
+const encoded = utils.encodeBase64Json({ ok: true, unit: "м" });
+assert.equal(JSON.stringify(utils.decodeBase64Json(encoded)), JSON.stringify({ ok: true, unit: "м" }));
+
+const project = projectFormat.createProjectPayload({
+  state: {
+    imageSrc: "data:image/png;base64,AA==",
+    imageName: "plan.png",
+    segments: [{ id: 1, name: "Base", start: { x: 0, y: 0 }, end: { x: 100, y: 0 } }],
+    polygons: [],
+    referenceId: 1,
+    referencePixelLength: 100,
+    referenceValue: "5",
+    unit: "м",
+    unitSystem: "metric",
+    backgroundVisible: true,
+    backgroundOpacity: 1,
+    previousBackgroundOpacity: 1,
+    footnotesVisible: true,
+    measurementPrecision: 3,
+    footnoteSize: "normal",
+    showUnitsInFootnotes: true,
+    smartGridEnabled: true,
+    detectionSensitivity: 15,
+    workflowMode: "manual",
+    scale: 1,
+    homeScale: 1,
+    offsetX: 0,
+    offsetY: 0,
+  },
+  cloneSegment: utils.cloneSegment,
+  clonePolygon: utils.clonePolygon,
+  parseDecimal: utils.parseDecimal,
+  getReferenceLength: () => 100,
+  currentReferenceValueMeters: () => 5,
+});
+assert.equal(project.version, 1);
+assert.equal(project.reference.valueMeters, 5);
+assert.equal(project.segments[0].name, "Base");
+
+const snapshot = projectFormat.snapshotFromProjectPayload(project, {
+  cloneSegment: utils.cloneSegment,
+  clonePolygon: utils.clonePolygon,
+  unitSystemForUnit: measurement.unitSystemForUnit,
+  defaultDetectionSensitivity: 15,
+});
+assert.equal(snapshot.referenceValueMeters, 5);
+assert.equal(snapshot.segments.length, 1);
+
+console.log("app-unit tests passed");

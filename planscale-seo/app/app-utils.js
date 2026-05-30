@@ -1,7 +1,9 @@
 (() => {
-  function clonePoint(point) {
-    return point ? { x: point.x, y: point.y } : null;
-  }
+  const {
+    clonePoint,
+    pointInsideRect,
+    segmentAngle,
+  } = window.PlanScaleGeometry;
 
   function cloneSegment(segment) {
     return {
@@ -38,10 +40,6 @@
       right: Math.max(start.x, end.x),
       bottom: Math.max(start.y, end.y),
     };
-  }
-
-  function pointInsideRect(point, rect) {
-    return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
   }
 
   function orientation(a, b, c) {
@@ -109,12 +107,6 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
-  }
-
-  function segmentAngle(segment) {
-    const radians = Math.atan2(segment.end.y - segment.start.y, segment.end.x - segment.start.x);
-    const degrees = radians * 180 / Math.PI;
-    return Math.round(degrees * 10) / 10;
   }
 
   window.PlanScaleUtils = {

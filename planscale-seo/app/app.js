@@ -7,18 +7,42 @@ const {
 } = window.PlanScaleDetectionCore;
 const {
   clonePoint,
+  segmentLength,
+  segmentAngle,
+  distanceToSegment,
+  pointInsideRect,
+  isGridAlignedSegment,
+} = window.PlanScaleGeometry;
+const {
   cloneSegment,
   clonePolygon,
   decodeBase64Json,
   normalizedRect,
-  pointInsideRect,
   lineSegmentsIntersect,
   parseDecimal,
   formatDecimal,
   rectsIntersect,
   roundedRectPath,
-  segmentAngle,
 } = window.PlanScaleUtils;
+const {
+  unitSystemForUnit,
+  displayValueToMeters,
+  metersToDisplayValue,
+  formatDisplayInput,
+  referenceMetersFromState,
+  segmentLengthMeters,
+  segmentLengthDisplay,
+  polygonAreaSquareMeters,
+  polygonAreaDisplay,
+} = window.PlanScaleMeasurement;
+const {
+  requestDialog,
+  confirmAction,
+} = window.PlanScaleDialogs;
+const {
+  createProjectPayload: buildProjectPayload,
+  snapshotFromProjectPayload: buildSnapshotFromProjectPayload,
+} = window.PlanScaleProjectFormat;
 const {
   canvas,
   wrap,
@@ -27,7 +51,6 @@ const {
   imageInput,
   removeUnderlayButton,
   resetPlanButton,
-  fitButton,
   selectModeButton,
   drawSegmentButton,
   drawAreaButton,
@@ -52,7 +75,6 @@ const {
   segmentSection,
   segmentsList,
   noSegments,
-  resultOutput,
   panelSummary,
   smartGridToggle,
   referenceLengthInput,
@@ -66,6 +88,9 @@ const {
   exportSvgButton,
   exportCsvButton,
   exportJsonButton,
+  exportProjectButton,
+  importProjectButton,
+  projectImportInput,
   copyShareLinkButton,
   helpButton,
   helpPopover,
@@ -158,6 +183,7 @@ const state = {
   selectedSegmentIds: new Set(),
   selectedPolygonIds: new Set(),
   referenceValue: "",
+  referenceValueMeters: null,
   unit: unitInput.value || "м",
   unitSystem: IMPERIAL_UNITS.has(unitInput.value) ? "imperial" : "metric",
   footnotesVisible: true,
@@ -228,6 +254,7 @@ const {
   exportPdf,
   exportCsv,
   exportJson,
+  exportProject,
   copyShareLink,
   exportSvg,
 } = window.PlanScaleExport.createExportController({
@@ -242,14 +269,17 @@ const {
     showToast,
     segmentLength,
     calculatedLengthFor,
+    calculatedLengthMetersFor,
     labelTextFor,
     areaLabelTextFor,
     polygonAreaFor,
+    polygonAreaSquareMetersFor,
     polygonCentroid,
     isSegmentFootnoteVisible,
     isPolygonFootnoteVisible,
     nearestPointOnRect,
     isGridAlignedSegment,
+    createProjectPayload,
   },
 });
 
@@ -278,8 +308,54 @@ function setUnitInputValue(value) {
   return unitInput.value || unit;
 }
 
-function unitSystemForUnit(unit) {
-  return IMPERIAL_UNITS.has(unit) ? "imperial" : "metric";
+function syncReferenceInputs() {
+  referenceLengthInput.value = state.referenceValue;
+  if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = state.referenceValue;
+}
+
+function syncReferenceValueMeters() {
+  state.referenceValueMeters = displayValueToMeters(state.referenceValue, state.unit);
+  return state.referenceValueMeters;
+}
+
+function currentReferenceValueMeters() {
+  return referenceMetersFromState(state);
+}
+
+function setReferenceValue(value, { syncInputs = true } = {}) {
+  state.referenceValue = value;
+  syncReferenceValueMeters();
+  if (syncInputs) syncReferenceInputs();
+}
+
+function setProjectUnit(unit, { commit = false, convertReference = true } = {}) {
+  const nextUnit = unit || "м";
+  const previousUnit = state.unit || "м";
+  const meters = currentReferenceValueMeters();
+  const shouldConvert = convertReference
+    && previousUnit !== nextUnit
+    && parseDecimal(state.referenceValue) !== null
+    && meters !== null;
+
+  state.unit = nextUnit;
+  state.unitSystem = unitSystemForUnit(state.unit);
+
+  if (shouldConvert) {
+    const converted = metersToDisplayValue(meters, state.unit);
+    if (converted !== null) {
+      state.referenceValue = formatDisplayInput(converted);
+    }
+  }
+
+  syncReferenceValueMeters();
+  setUnitInputValue(state.unit);
+  syncReferenceInputs();
+  updateUnitSystemControls();
+
+  if (commit) {
+    updateAll();
+    commitHistory();
+  }
 }
 
 function updateUnitSystemControls() {
@@ -292,14 +368,7 @@ function updateUnitSystemControls() {
 
 function setProjectUnitSystem(system, { commit = false } = {}) {
   const nextSystem = system === "imperial" ? "imperial" : "metric";
-  state.unitSystem = nextSystem;
-  state.unit = nextSystem === "imperial" ? "ft" : "м";
-  setUnitInputValue(state.unit);
-  updateUnitSystemControls();
-  if (commit) {
-    updateAll();
-    commitHistory();
-  }
+  setProjectUnit(nextSystem === "imperial" ? "ft" : "м", { commit });
 }
 
 function setBackgroundOpacity(value, { remember = true } = {}) {
@@ -390,6 +459,7 @@ function snapshotState() {
     selectedSegmentIds: getSelectedIds(),
     selectedPolygonIds: getSelectedPolygonIds(),
     referenceValue: state.referenceValue,
+    referenceValueMeters: state.referenceValueMeters,
     unit: state.unit,
     unitSystem: state.unitSystem,
     footnotesVisible: state.footnotesVisible,
@@ -405,6 +475,26 @@ function snapshotState() {
     nextSegmentId,
     nextPolygonId,
   };
+}
+
+function createProjectPayload() {
+  return buildProjectPayload({
+    state,
+    cloneSegment,
+    clonePolygon,
+    parseDecimal,
+    getReferenceLength,
+    currentReferenceValueMeters,
+  });
+}
+
+function snapshotFromProjectPayload(payload) {
+  return buildSnapshotFromProjectPayload(payload, {
+    cloneSegment,
+    clonePolygon,
+    unitSystemForUnit,
+    defaultDetectionSensitivity: DEFAULT_DETECTION_SENSITIVITY,
+  });
 }
 
 function loadImage(src) {
@@ -455,8 +545,12 @@ async function applySnapshot(snapshot) {
     state.selectedSegmentIds = new Set(snapshot.selectedSegmentIds || []);
     state.selectedPolygonIds = new Set(snapshot.selectedPolygonIds || []);
     state.referenceValue = snapshot.referenceValue || "";
+    state.referenceValueMeters = typeof snapshot.referenceValueMeters === "number"
+      ? snapshot.referenceValueMeters
+      : null;
     state.unit = snapshot.unit || "м";
     state.unitSystem = snapshot.unitSystem || unitSystemForUnit(state.unit);
+    syncReferenceValueMeters();
     state.footnotesVisible = typeof snapshot.footnotesVisible === "boolean"
       ? snapshot.footnotesVisible
       : (state.segments.length + state.polygons.length) === 0
@@ -492,11 +586,9 @@ async function applySnapshot(snapshot) {
     nextSegmentId = snapshot.nextSegmentId || Math.max(1, ...state.segments.map((segment) => segment.id + 1), 1);
     nextPolygonId = snapshot.nextPolygonId || Math.max(1, ...state.polygons.map((polygon) => polygon.id + 1), 1);
 
-    referenceLengthInput.value = state.referenceValue;
     setUnitInputValue(state.unit);
+    syncReferenceInputs();
     updateUnitSystemControls();
-    if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = state.referenceValue;
-    if (inlineUnitInput) inlineUnitInput.value = state.unit;
     updateDetectionSensitivityControls();
     smartGridToggle.checked = state.smartGridEnabled;
     updateToolControls();
@@ -547,8 +639,12 @@ function restoreSharedStateFromHash() {
       ? payload.basePixelLength
       : getReferenceLengthFromSegments(state.referenceId);
     state.referenceValue = payload.baseValue ? String(payload.baseValue).replace(".", ",") : "";
+    state.referenceValueMeters = typeof payload.baseValueMeters === "number"
+      ? payload.baseValueMeters
+      : null;
     state.unit = payload.unit || state.unit || "м";
     state.unitSystem = payload.unitSystem || unitSystemForUnit(state.unit);
+    syncReferenceValueMeters();
     state.footnotesVisible = typeof payload.footnotesVisible === "boolean"
       ? payload.footnotesVisible
       : (state.segments.length + state.polygons.length) === 0
@@ -562,8 +658,8 @@ function restoreSharedStateFromHash() {
     state.isChoosingBase = !getReferenceLength() && state.segments.length > 0;
     nextSegmentId = Math.max(1, ...state.segments.map((segment) => segment.id + 1), 1);
     nextPolygonId = Math.max(1, ...state.polygons.map((polygon) => polygon.id + 1), 1);
-    referenceLengthInput.value = state.referenceValue;
     setUnitInputValue(state.unit);
+    syncReferenceInputs();
     return true;
   } catch {
     return false;
@@ -615,7 +711,6 @@ function updateHistoryButtons() {
   redoButton.disabled = historyState.redo.length === 0;
   removeUnderlayButton.disabled = !hasImage;
   resetPlanButton.disabled = !hasImage && !hasObjects && !hasDetected;
-  if (fitButton) fitButton.disabled = !hasImage;
   if (selectModeButton) selectModeButton.disabled = !hasImage;
   drawSegmentButton.disabled = !hasImage;
   if (drawAreaButton) drawAreaButton.disabled = !hasImage;
@@ -801,7 +896,7 @@ function realValueCandidates() {
 function syncScaleRuler() {
   if (!scaleRuler || !scaleRulerLine || !scaleRulerValue || !scaleRulerZoom) return;
 
-  const referenceValue = parseDecimal(state.referenceValue);
+  const referenceValue = metersToDisplayValue(currentReferenceValueMeters(), state.unit);
   const referenceLength = getReferenceLength();
   if (!state.image || !referenceLength || referenceValue === null || referenceValue <= 0) {
     scaleRuler.hidden = true;
@@ -1106,29 +1201,6 @@ function imageToScreen(point) {
 
 function clampPointToImage(point) {
   return point;
-}
-
-function segmentLength(segment) {
-  const dx = segment.end.x - segment.start.x;
-  const dy = segment.end.y - segment.start.y;
-  return Math.hypot(dx, dy);
-}
-
-function distanceToSegment(point, start, end) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lengthSquared = dx * dx + dy * dy;
-
-  if (!lengthSquared) {
-    return Math.hypot(point.x - start.x, point.y - start.y);
-  }
-
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
-  const projection = {
-    x: start.x + t * dx,
-    y: start.y + t * dy,
-  };
-  return Math.hypot(point.x - projection.x, point.y - projection.y);
 }
 
 function findSegmentAt(clientX, clientY, tolerance = isCoarsePointer() ? 30 : 18) {
@@ -1438,17 +1510,6 @@ function isRightAngle(vectorA, vectorB) {
   return cosine < 0.08;
 }
 
-function isGridAlignedSegment(segment) {
-  const dx = segment.end.x - segment.start.x;
-  const dy = segment.end.y - segment.start.y;
-  const length = Math.hypot(dx, dy);
-  if (length < 1) return false;
-
-  const axisError = Math.min(Math.abs(dx), Math.abs(dy));
-  const tolerance = Math.max(1, length * 0.015);
-  return axisError <= tolerance;
-}
-
 function computeRightAngleHints() {
   const hints = [];
   const ids = new Set();
@@ -1594,9 +1655,7 @@ function setReferenceSegment(id, { focusLength = true } = {}) {
   state.isChoosingBase = false;
   state.isEditingReferenceLength = true;
   if (changedReference) {
-    state.referenceValue = "";
-    referenceLengthInput.value = "";
-    if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = "";
+    setReferenceValue("");
   } else if (inlineReferenceLengthInput) {
     inlineReferenceLengthInput.value = state.referenceValue;
   }
@@ -1767,11 +1826,12 @@ function ratioFor(segment) {
   return segmentLength(segment) / referenceLength;
 }
 
+function calculatedLengthMetersFor(segment) {
+  return segmentLengthMeters(segment, getReferenceLength(), currentReferenceValueMeters(), segmentLength);
+}
+
 function calculatedLengthFor(segment) {
-  const ratio = ratioFor(segment);
-  const referenceValue = parseDecimal(state.referenceValue);
-  if (ratio === null || referenceValue === null) return null;
-  return ratio * referenceValue;
+  return segmentLengthDisplay(segment, getReferenceLength(), currentReferenceValueMeters(), state.unit, segmentLength);
 }
 
 function cloneDetectedSegment(segment) {
@@ -1800,8 +1860,7 @@ function materializeDetectedSegments(append = false) {
     state.referencePixelLength = reference
       ? segmentLength(reference)
       : (referencePixelLength || state.referencePixelLength);
-    state.referenceValue = reference || state.referencePixelLength ? referenceValue : "";
-    referenceLengthInput.value = state.referenceValue;
+    setReferenceValue(reference || state.referencePixelLength ? referenceValue : "");
     nextSegmentId = Math.max(1, ...state.segments.map((segment) => segment.id + 1), 1);
     clearSelection();
   }
@@ -2039,12 +2098,11 @@ function polygonCentroid(polygon) {
 }
 
 function polygonAreaFor(polygon) {
-  const referenceValue = parseDecimal(state.referenceValue);
-  if (referenceValue === null || referenceValue <= 0) return null;
-  const referencePx = getReferenceLength();
-  if (!referencePx) return null;
-  const unitsPerPixel = referenceValue / referencePx;
-  return polygonAreaPx(polygon.points) * unitsPerPixel * unitsPerPixel;
+  return polygonAreaDisplay(polygon.points, getReferenceLength(), currentReferenceValueMeters(), state.unit, polygonAreaPx);
+}
+
+function polygonAreaSquareMetersFor(polygon) {
+  return polygonAreaSquareMeters(polygon.points, getReferenceLength(), currentReferenceValueMeters(), polygonAreaPx);
 }
 
 function isPolygonFootnoteVisible(polygon) {
@@ -2560,50 +2618,6 @@ function drawPendingPreview() {
   ctx.restore();
 }
 
-function drawRightAngleHints() {
-  return;
-  if (!state.rightAngleHints.length) return;
-
-  ctx.save();
-  ctx.strokeStyle = "rgba(119, 104, 200, 0.64)";
-  ctx.lineWidth = 1.4;
-
-  for (const hint of state.rightAngleHints) {
-    if (!hint.ids.some((id) => state.selectedSegmentIds.has(id))) {
-      continue;
-    }
-
-    const joint = imageToScreen(hint.joint);
-    const vectorA = hint.vectorA;
-    const vectorB = hint.vectorB;
-    const lengthA = Math.hypot(vectorA.x, vectorA.y);
-    const lengthB = Math.hypot(vectorB.x, vectorB.y);
-    if (!lengthA || !lengthB) continue;
-
-    const size = 16;
-    const a = {
-      x: joint.x + (vectorA.x / lengthA) * size,
-      y: joint.y + (vectorA.y / lengthA) * size,
-    };
-    const b = {
-      x: joint.x + (vectorB.x / lengthB) * size,
-      y: joint.y + (vectorB.y / lengthB) * size,
-    };
-    const corner = {
-      x: a.x + b.x - joint.x,
-      y: a.y + b.y - joint.y,
-    };
-
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(corner.x, corner.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
 function drawHintPill(text, x, y) {
   ctx.save();
   ctx.font = "700 13px 'DM Sans', Inter, system-ui, sans-serif";
@@ -2707,7 +2721,6 @@ function draw() {
     drawSegment(segment);
   }
 
-  drawRightAngleHints();
   drawOrthogonalGuide();
   drawAlignmentGuide();
   drawPendingPreview();
@@ -2760,8 +2773,13 @@ function showSegmentContextMenu(segment, clientX, clientY) {
   segmentContextMenu.style.top = `${Math.max(10, top)}px`;
 }
 
-function renameSegmentWithPrompt(segment) {
-  const nextName = window.prompt("Название отрезка", segment.name);
+async function renameSegmentWithPrompt(segment) {
+  const nextName = await requestDialog({
+    title: "Название отрезка",
+    message: "Введите понятное имя для выбранного измерения.",
+    inputValue: segment.name,
+    confirmText: "Сохранить",
+  });
   if (nextName === null) return;
   segment.name = nextName.trim() || `Отрезок ${segment.id}`;
   updateAll();
@@ -2893,8 +2911,7 @@ function segmentsSummaryText() {
 }
 
 function renderOutput() {
-  if (!resultOutput) return;
-  resultOutput.value = segmentsSummaryText();
+  // Kept as a panel callback until segments-panel no longer needs the legacy hook.
 }
 
 function updateStatus() {
@@ -2982,9 +2999,7 @@ function addPoint(point) {
   if (!getReferenceLength()) {
     state.referenceId = id;
     state.referencePixelLength = segmentLength(segment);
-    state.referenceValue = "";
-    referenceLengthInput.value = "";
-    if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = "";
+    setReferenceValue("");
     state.isChoosingBase = false;
     state.isDrawingSegments = false;
   }
@@ -3113,9 +3128,13 @@ function deleteSelectedObjects() {
   showToast(count === 1 ? "Объект удалён" : `Удалено: ${count}`);
 }
 
-function resetPlan() {
+async function resetPlan() {
   if (!state.image && !state.segments.length && !state.polygons.length && !state.detectedSegments.length) return;
-  const confirmed = window.confirm("Удалить изображение, все измерения и настройки?");
+  const confirmed = await confirmAction("Удалить изображение, все измерения и настройки?", {
+    title: "Сбросить проект",
+    confirmText: "Сбросить",
+    danger: true,
+  });
   if (!confirmed) return;
 
   analysisRunId++;
@@ -3141,7 +3160,7 @@ function resetPlan() {
   state.referencePixelLength = null;
   state.selectedSegmentIds = new Set();
   state.selectedPolygonIds = new Set();
-  state.referenceValue = "";
+  setReferenceValue("");
   state.isEditingReferenceLength = false;
   state.unit = rememberedUnit;
   state.unitSystem = rememberedUnitSystem;
@@ -3200,20 +3219,24 @@ function showToast(message) {
   window.setTimeout(() => toast.remove(), 1800);
 }
 
-function shouldReplaceCurrentPlan() {
+async function shouldReplaceCurrentPlan() {
   if (!state.image || (!state.segments.length && !state.polygons.length && !state.detectedSegments.length)) {
     return true;
   }
-  return window.confirm("Заменить изображение? Текущая разметка будет очищена.");
+  return await confirmAction("Заменить изображение? Текущая разметка будет очищена.", {
+    title: "Заменить изображение",
+    confirmText: "Заменить",
+    danger: true,
+  });
 }
 
-function loadImageFile(file) {
+async function loadImageFile(file) {
   if (!file) return;
   if (!file.type.startsWith("image/")) {
     showToast("Выберите файл изображения");
     return;
   }
-  if (!shouldReplaceCurrentPlan()) {
+  if (!(await shouldReplaceCurrentPlan())) {
     return;
   }
 
@@ -3232,10 +3255,8 @@ function loadImageFile(file) {
         state.polygons = [];
         state.referenceId = null;
         state.referencePixelLength = null;
-        state.referenceValue = "";
+        setReferenceValue("");
         state.isEditingReferenceLength = false;
-        referenceLengthInput.value = "";
-        if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = "";
         state.isChoosingBase = false;
         clearSelection();
       }
@@ -3266,6 +3287,31 @@ function loadImageFile(file) {
   });
   reader.addEventListener("error", () => showToast("Не удалось открыть файл"), { once: true });
   reader.readAsDataURL(file);
+}
+
+function importProjectFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.addEventListener("load", async () => {
+    try {
+      const payload = JSON.parse(String(reader.result || ""));
+      const snapshot = snapshotFromProjectPayload(payload);
+      historyState.undo = [];
+      historyState.redo = [];
+      await applySnapshot(snapshot);
+      commitHistory();
+      showToast("Проект загружен");
+    } catch {
+      showToast("Не удалось открыть проект");
+    } finally {
+      if (projectImportInput) projectImportInput.value = "";
+    }
+  });
+  reader.addEventListener("error", () => {
+    showToast("Не удалось прочитать файл проекта");
+    if (projectImportInput) projectImportInput.value = "";
+  });
+  reader.readAsText(file);
 }
 
 imageInput.addEventListener("change", () => {
@@ -3329,10 +3375,6 @@ cancelBaseButton?.addEventListener("click", () => {
   updateAll();
 });
 
-fitButton?.addEventListener("click", () => {
-  fitImage();
-  scheduleViewSave();
-});
 selectModeButton?.addEventListener("click", () => setToolMode("select"));
 drawSegmentButton.addEventListener("click", () => setToolMode(state.isDrawingSegments ? "select" : "line"));
 drawAreaButton?.addEventListener("click", () => setToolMode(state.isDrawingArea ? "select" : "area"));
@@ -3412,6 +3454,14 @@ exportPdfBgButton.addEventListener("click", () => exportPdf(true));
 exportSvgButton.addEventListener("click", exportSvg);
 exportCsvButton.addEventListener("click", exportCsv);
 exportJsonButton.addEventListener("click", exportJson);
+exportProjectButton?.addEventListener("click", exportProject);
+importProjectButton?.addEventListener("click", () => {
+  setExportMenuOpen(false);
+  projectImportInput?.click();
+});
+projectImportInput?.addEventListener("change", () => {
+  importProjectFile(projectImportInput.files?.[0]);
+});
 copyShareLinkButton.addEventListener("click", copyShareLink);
 helpButton?.addEventListener("click", (event) => {
   event.stopPropagation();
@@ -3470,37 +3520,27 @@ segmentContextMenu.addEventListener("click", (event) => {
 welcomeStartButton.addEventListener("click", dismissWelcome);
 
 referenceLengthInput.addEventListener("input", () => {
-  state.referenceValue = referenceLengthInput.value;
+  setReferenceValue(referenceLengthInput.value);
   if (parseDecimal(state.referenceValue) !== null) {
     state.referencePixelLength = getReferenceLength() || state.referencePixelLength;
   }
-  if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = state.referenceValue;
   updateAll();
 });
 referenceLengthInput.addEventListener("change", () => {
-  state.referenceValue = referenceLengthInput.value;
+  setReferenceValue(referenceLengthInput.value);
   if (parseDecimal(state.referenceValue) !== null) {
     state.referencePixelLength = getReferenceLength() || state.referencePixelLength;
   }
-  if (inlineReferenceLengthInput) inlineReferenceLengthInput.value = state.referenceValue;
   updateAll();
   commitHistory();
 });
 
 unitInput.addEventListener("input", () => {
-  state.unit = unitInput.value;
-  state.unitSystem = unitSystemForUnit(state.unit);
-  if (inlineUnitInput) inlineUnitInput.value = state.unit;
-  if (settingsUnitInput) settingsUnitInput.value = state.unit;
-  updateUnitSystemControls();
+  setProjectUnit(unitInput.value);
   updateAll();
 });
 unitInput.addEventListener("change", () => {
-  state.unit = unitInput.value;
-  state.unitSystem = unitSystemForUnit(state.unit);
-  if (inlineUnitInput) inlineUnitInput.value = state.unit;
-  if (settingsUnitInput) settingsUnitInput.value = state.unit;
-  updateUnitSystemControls();
+  setProjectUnit(unitInput.value);
   updateAll();
   commitHistory();
 });
@@ -3508,10 +3548,7 @@ unitInput.addEventListener("change", () => {
 segmentsSortSelect.addEventListener("change", renderSegments);
 
 settingsUnitInput?.addEventListener("change", () => {
-  state.unit = settingsUnitInput.value;
-  state.unitSystem = unitSystemForUnit(state.unit);
-  setUnitInputValue(state.unit);
-  updateUnitSystemControls();
+  setProjectUnit(settingsUnitInput.value);
   updateAll();
   commitHistory();
 });
@@ -3577,9 +3614,7 @@ toggleBackgroundOpacityButton?.addEventListener("click", () => {
 });
 
 inlineUnitInput?.addEventListener("change", () => {
-  state.unit = inlineUnitInput.value;
-  state.unitSystem = unitSystemForUnit(state.unit);
-  setUnitInputValue(state.unit);
+  setProjectUnit(inlineUnitInput.value);
   updateAll();
 });
 
@@ -3591,12 +3626,9 @@ inlineCalibration?.addEventListener("submit", (event) => {
     inlineReferenceLengthInput?.focus();
     return;
   }
-  state.referenceValue = value;
+  setReferenceValue(value);
   state.referencePixelLength = getReferenceLength() || state.referencePixelLength;
-  referenceLengthInput.value = value;
-  state.unit = inlineUnitInput?.value || state.unit;
-  state.unitSystem = unitSystemForUnit(state.unit);
-  setUnitInputValue(state.unit);
+  setProjectUnit(inlineUnitInput?.value || state.unit, { convertReference: false });
   state.isEditingReferenceLength = false;
   state.isChoosingBase = false;
   state.nextActionPromptVisible = false;

@@ -166,6 +166,16 @@ async function runCase(browser, origin, profile) {
     const exportHref = await page.locator('#exportStatus a[download$=".json"]').getAttribute("href");
     return readDataUrlJson(exportHref || "");
   }
+  async function exportProjectPayload() {
+    await page.locator("#exportMenuButton").click();
+    await page.locator("#exportProjectButton").click();
+    await page.waitForFunction(() => {
+      const status = document.querySelector("#exportStatus");
+      return status && !status.hidden && status.textContent.includes("Экспорт готов");
+    }, null, { timeout: 6000 });
+    const exportHref = await page.locator('#exportStatus a[download$=".truescale.json"]').getAttribute("href");
+    return readDataUrlJson(exportHref || "");
+  }
 
   page.on("pageerror", (error) => issues.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
@@ -317,17 +327,17 @@ async function runCase(browser, origin, profile) {
       movedPolygon.points[0].y - polygon.points[0].y,
     ) > 8);
   }
+  const projectPayload = await exportProjectPayload();
 
   const baseMidpoint = baseSegment
     ? {
-      x: activeCanvasBox.x + fittedOffset.x + ((baseSegment.startX + baseSegment.endX) / 2) * fittedImageScale,
-      y: activeCanvasBox.y + fittedOffset.y + ((baseSegment.startY + baseSegment.endY) / 2) * fittedImageScale,
+      x: activeCanvasBox.x + fittedOffset.x + (baseSegment.startX * 0.72 + baseSegment.endX * 0.28) * fittedImageScale,
+      y: activeCanvasBox.y + fittedOffset.y + (baseSegment.startY * 0.72 + baseSegment.endY * 0.28) * fittedImageScale,
     }
     : null;
   let baseScalePreservedAfterDelete = false;
   if (baseMidpoint) {
-    await page.mouse.click(baseMidpoint.x, baseMidpoint.y);
-    await page.keyboard.press("Delete");
+    await page.locator("#segmentsList .delete-button").first().evaluate((node) => node.click());
     const afterDeleteJson = await exportJsonPayload();
     baseScalePreservedAfterDelete = Boolean(
       afterDeleteJson.baseValue === 5
@@ -336,6 +346,41 @@ async function runCase(browser, origin, profile) {
       && afterDeleteJson.segments?.some((segment) => segment.calculatedLength !== null),
     );
   }
+  await page.locator("#unitInput").evaluate((node) => {
+    node.value = "см";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const centimetersExportJson = await exportJsonPayload();
+  const unitConvertedToCm = centimetersExportJson.unit === "см"
+    && centimetersExportJson.baseValue === 500
+    && centimetersExportJson.baseValueMeters === 5
+    && centimetersExportJson.segments?.some((segment) => segment.calculatedLengthMeters !== null);
+  await page.locator("#unitInput").evaluate((node) => {
+    node.value = "м";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const metersExportJson = await exportJsonPayload();
+  const unitConvertedBackToM = metersExportJson.unit === "м"
+    && metersExportJson.baseValue === 5
+    && metersExportJson.baseValueMeters === 5;
+  await page.evaluate(() => localStorage.clear());
+  await page.goto(`${origin}${appPath}`, { waitUntil: "domcontentloaded" });
+  if (await page.locator("#welcomeStartButton").isVisible().catch(() => false)) {
+    await page.locator("#welcomeStartButton").click();
+  }
+  await page.locator("#projectImportInput").setInputFiles({
+    name: "restored-project.truescale.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(projectPayload)),
+  });
+  await page.waitForFunction(() => document.querySelector("#scaleRuler") && !document.querySelector("#scaleRuler").hidden, null, { timeout: 6000 });
+  const restoredExportJson = await exportJsonPayload();
+  const projectImportRestored = restoredExportJson.baseValue === 5
+    && restoredExportJson.baseValueMeters === 5
+    && restoredExportJson.segments?.length >= 2
+    && restoredExportJson.polygons?.length === 1;
 
   const bodyText = await page.locator("body").textContent();
   const exportStatus = await page.locator("#exportStatus").textContent();
@@ -354,6 +399,9 @@ async function runCase(browser, origin, profile) {
     inlineHasBaseLabel,
     inlineSubmitText,
     scaleRulerVisible,
+    unitConvertedToCm,
+    unitConvertedBackToM,
+    projectImportRestored,
     segmentCreated: (exportJson.segments || []).length >= 2,
     secondSegmentStartsFromExistingPoint: snappedSecondSegment,
     polygonCreated,
@@ -391,6 +439,9 @@ try {
     result.inlineHasBaseLabel ||
     result.inlineSubmitText?.trim() !== "Готово" ||
     !result.scaleRulerVisible ||
+    !result.unitConvertedToCm ||
+    !result.unitConvertedBackToM ||
+    !result.projectImportRestored ||
     !result.segmentCreated ||
     !result.secondSegmentStartsFromExistingPoint ||
     !result.polygonCreated ||

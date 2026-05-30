@@ -3,6 +3,7 @@
   const DETECTION_SENSITIVITY_MIN = config.DETECTION_SENSITIVITY_MIN ?? 15;
   const DETECTION_SENSITIVITY_MAX = config.DETECTION_SENSITIVITY_MAX ?? 100;
   const DEFAULT_DETECTION_SENSITIVITY = config.DEFAULT_DETECTION_SENSITIVITY ?? DETECTION_SENSITIVITY_MIN;
+  const { segmentLength } = global.PlanScaleGeometry;
 
   function normalizeDetectionSensitivity(value) {
     if (value === "clear") return DETECTION_SENSITIVITY_MIN;
@@ -27,10 +28,6 @@
       axisToleranceRatio: 0.001 + t * 0.01,
       maxThicknessRatio: 0.004 + t * 0.06,
     };
-  }
-
-  function segmentLength(segment) {
-    return Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y);
   }
 
   function median(values) {
