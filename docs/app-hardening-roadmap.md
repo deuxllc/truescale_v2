@@ -8,8 +8,8 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 
 - Static browser app with no backend.
 - Browser scripts still load through ordered `<script>` tags and `window.PlanScale...` namespaces.
-- Domain code is now split into dedicated modules for geometry, measurement, dialogs, project format, canvas view transforms, detection, snapping, export, and the segments panel.
-- `app.js` remains the orchestration layer for canvas interaction, rendering, state transitions, history, and UI synchronization.
+- Domain code is now split into dedicated modules for geometry, measurement, dialogs, project format, canvas view transforms, canvas rendering, detection, snapping, export, and the segments panel.
+- `app.js` remains the orchestration layer for canvas interaction, state transitions, history, and UI synchronization.
 
 ## Implemented In This Cycle
 
@@ -21,14 +21,14 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 - Added normalized meter and square-meter values to data export.
 - Added `.truescale.json` project export/import through `PlanScaleProjectFormat`.
 - Replaced browser `prompt()` and `confirm()` with app-owned modal dialogs.
-- Extracted app state, history snapshots, and canvas view transforms into dedicated modules.
+- Extracted app state, history snapshots, canvas view transforms, and canvas rendering into dedicated modules.
 - Removed stale DOM references for missing `fitButton` and `resultOutput`.
 - Removed the disabled right-angle drawing branch while preserving right-angle coloring metadata.
 - Expanded syntax, unit, and smoke tests.
 
 ## Remaining Architecture Work
 
-- Continue reducing `app.js` by extracting renderer, pointer/keyboard interactions, and UI synchronization controllers.
+- Continue reducing `app.js` by extracting pointer/keyboard interactions and UI synchronization controllers.
 - Split `styles.css` into logical CSS files after the JS behavior stabilizes.
 - Move from global namespaces to ES modules.
 - Add TypeScript only after ES modules are stable.
