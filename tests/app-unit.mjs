@@ -17,6 +17,7 @@ for (const file of [
   "planscale-seo/app/app-state.js",
   "planscale-seo/app/app-history.js",
   "planscale-seo/app/project-format.js",
+  "planscale-seo/app/canvas-hit-testing.js",
 ]) {
   vm.runInContext(await readFile(file, "utf8"), context, { filename: file });
 }
@@ -27,6 +28,7 @@ const measurement = context.window.PlanScaleMeasurement;
 const appState = context.window.PlanScaleState;
 const appHistory = context.window.PlanScaleHistory;
 const projectFormat = context.window.PlanScaleProjectFormat;
+const hitTesting = context.window.PlanScaleCanvasHitTesting;
 
 assert.equal(utils.parseDecimal("12,5"), 12.5);
 assert.equal(utils.parseDecimal(" 1 200.25 "), 1200.25);
@@ -162,5 +164,51 @@ assert.equal(history.undoLength, 2);
 assert.equal(savedSnapshot.version, 2);
 assert.ok(updateCount >= 4);
 assert.equal(appliedSnapshots.length, 2);
+
+const hitState = {
+  segments: [
+    { id: 1, start: { x: 0, y: 0 }, end: { x: 100, y: 0 } },
+    { id: 2, start: { x: 30, y: -20 }, end: { x: 30, y: 20 } },
+  ],
+  polygons: [
+    {
+      id: 10,
+      points: [
+        { x: 200, y: 200 },
+        { x: 260, y: 200 },
+        { x: 260, y: 260 },
+        { x: 200, y: 260 },
+      ],
+    },
+  ],
+  selectedSegmentIds: new Set([1]),
+  labelBounds: new Map([[1, { left: 45, top: -10, right: 65, bottom: 10 }]]),
+  polygonLabelBounds: new Map([[10, { left: 210, top: 210, right: 230, bottom: 230 }]]),
+  selectionBox: { start: { x: -10, y: -10 }, end: { x: 40, y: 10 } },
+};
+const identityView = {
+  imageToScreen: (point) => point,
+  screenPointFromClient: (clientX, clientY) => ({ x: clientX, y: clientY }),
+};
+const hit = hitTesting.createCanvasHitTesting({
+  state: hitState,
+  view: identityView,
+  touchEndpointHitRadius: 28,
+  helpers: {
+    distanceToSegment: geometry.distanceToSegment,
+    isCoarsePointer: () => false,
+    lineSegmentsIntersect: utils.lineSegmentsIntersect,
+    normalizedRect: utils.normalizedRect,
+    pointInsideRect: geometry.pointInsideRect,
+  },
+});
+assert.equal(hit.findEndpointAt(0, 0)?.endpoint, "start");
+assert.equal(hit.resolveHit(50, 0).label?.id, 1);
+assert.equal(hit.findSegmentAt(30, 17)?.id, 2);
+assert.equal(hit.resolveHit(220, 220).polygonLabel?.id, 10);
+assert.equal(hit.findPolygonAt(250, 250)?.id, 10);
+assert.deepEqual(hit.segmentIdsInsideSelectionBox(), [1, 2]);
+hitState.selectionBox = { start: { x: 205, y: 205 }, end: { x: 255, y: 255 } };
+assert.deepEqual(hit.polygonIdsInsideSelectionBox(), [10]);
 
 console.log("app-unit tests passed");

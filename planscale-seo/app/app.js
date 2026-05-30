@@ -53,6 +53,9 @@ const {
   createCanvasView,
 } = window.PlanScaleCanvasView;
 const {
+  createCanvasHitTesting,
+} = window.PlanScaleCanvasHitTesting;
+const {
   createCanvasRenderer,
 } = window.PlanScaleCanvasRenderer;
 const {
@@ -230,6 +233,18 @@ const canvasView = createCanvasView({
   draw,
   beforeResize: syncCanvasHeightToViewport,
   syncOverlays: syncCanvasOverlays,
+});
+const canvasHitTesting = createCanvasHitTesting({
+  state,
+  view: canvasView,
+  touchEndpointHitRadius: TOUCH_ENDPOINT_HIT_RADIUS,
+  helpers: {
+    distanceToSegment,
+    isCoarsePointer,
+    lineSegmentsIntersect,
+    normalizedRect,
+    pointInsideRect,
+  },
 });
 const canvasRenderer = createCanvasRenderer({
   state,
@@ -1171,82 +1186,23 @@ function clampPointToImage(point) {
 }
 
 function findSegmentAt(clientX, clientY, tolerance = isCoarsePointer() ? 30 : 18) {
-  const point = screenPointFromClient(clientX, clientY);
-  let closest = null;
-  let closestDistance = Infinity;
-
-  for (const segment of state.segments) {
-    const start = imageToScreen(segment.start);
-    const end = imageToScreen(segment.end);
-    const distance = distanceToSegment(point, start, end);
-
-    if (distance < closestDistance) {
-      closestDistance = distance;
-      closest = segment;
-    }
-  }
-
-  return closestDistance <= tolerance ? closest : null;
+  return canvasHitTesting.findSegmentAt(clientX, clientY, tolerance);
 }
 
 function findLabelAt(clientX, clientY) {
-  const point = screenPointFromClient(clientX, clientY);
-
-  for (const [id, rect] of state.labelBounds.entries()) {
-    if (pointInsideRect(point, rect)) {
-      return state.segments.find((segment) => segment.id === id) ?? null;
-    }
-  }
-
-  return null;
+  return canvasHitTesting.findLabelAt(clientX, clientY);
 }
 
 function findPolygonLabelAt(clientX, clientY) {
-  const point = screenPointFromClient(clientX, clientY);
-
-  for (const [id, rect] of state.polygonLabelBounds.entries()) {
-    if (pointInsideRect(point, rect)) {
-      return state.polygons.find((polygon) => polygon.id === id) ?? null;
-    }
-  }
-
-  return null;
+  return canvasHitTesting.findPolygonLabelAt(clientX, clientY);
 }
 
 function findPolygonAt(clientX, clientY) {
-  const point = screenPointFromClient(clientX, clientY);
-
-  for (let index = state.polygons.length - 1; index >= 0; index--) {
-    const polygon = state.polygons[index];
-    const points = polygon.points.map(imageToScreen);
-    if (pointInsidePolygon(point, points)) {
-      return polygon;
-    }
-  }
-
-  return null;
+  return canvasHitTesting.findPolygonAt(clientX, clientY);
 }
 
 function findEndpointAt(clientX, clientY) {
-  const point = screenPointFromClient(clientX, clientY);
-  let closest = null;
-  let closestDistance = Infinity;
-  const hitRadius = isCoarsePointer() ? TOUCH_ENDPOINT_HIT_RADIUS : 16;
-
-  for (const segment of state.segments) {
-    if (!isSegmentSelected(segment)) continue;
-
-    for (const endpoint of ["start", "end"]) {
-      const screen = imageToScreen(segment[endpoint]);
-      const distance = Math.hypot(point.x - screen.x, point.y - screen.y);
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closest = { segment, endpoint };
-      }
-    }
-  }
-
-  return closestDistance <= hitRadius ? closest : null;
+  return canvasHitTesting.findEndpointAt(clientX, clientY);
 }
 
 function findSnapPoint(imagePoint, segmentId) {
@@ -1688,90 +1644,12 @@ function getSelectedPolygonIds() {
   return [...state.selectedPolygonIds];
 }
 
-function segmentIntersectsRect(segment, rect) {
-  const start = imageToScreen(segment.start);
-  const end = imageToScreen(segment.end);
-  const midpoint = {
-    x: (start.x + end.x) / 2,
-    y: (start.y + end.y) / 2,
-  };
-
-  if (pointInsideRect(start, rect) || pointInsideRect(end, rect) || pointInsideRect(midpoint, rect)) {
-    return true;
-  }
-
-  const topLeft = { x: rect.left, y: rect.top };
-  const topRight = { x: rect.right, y: rect.top };
-  const bottomRight = { x: rect.right, y: rect.bottom };
-  const bottomLeft = { x: rect.left, y: rect.bottom };
-
-  return (
-    lineSegmentsIntersect(start, end, topLeft, topRight) ||
-    lineSegmentsIntersect(start, end, topRight, bottomRight) ||
-    lineSegmentsIntersect(start, end, bottomRight, bottomLeft) ||
-    lineSegmentsIntersect(start, end, bottomLeft, topLeft)
-  );
-}
-
 function segmentIdsInsideSelectionBox() {
-  if (!state.selectionBox) return [];
-  const rect = normalizedRect(state.selectionBox.start, state.selectionBox.end);
-  return state.segments
-    .filter((segment) => segmentIntersectsRect(segment, rect))
-    .map((segment) => segment.id);
-}
-
-function pointInsidePolygon(point, points) {
-  if (!Array.isArray(points) || points.length < 3) return false;
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const current = points[i];
-    const previous = points[j];
-    const intersects = ((current.y > point.y) !== (previous.y > point.y))
-      && (point.x < (previous.x - current.x) * (point.y - current.y) / ((previous.y - current.y) || 0.000001) + current.x);
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function polygonIntersectsRect(polygon, rect) {
-  const points = polygon.points.map(imageToScreen);
-  if (points.some((point) => pointInsideRect(point, rect))) return true;
-
-  const center = {
-    x: (rect.left + rect.right) / 2,
-    y: (rect.top + rect.bottom) / 2,
-  };
-  if (pointInsidePolygon(center, points)) return true;
-
-  const topLeft = { x: rect.left, y: rect.top };
-  const topRight = { x: rect.right, y: rect.top };
-  const bottomRight = { x: rect.right, y: rect.bottom };
-  const bottomLeft = { x: rect.left, y: rect.bottom };
-  const rectEdges = [
-    [topLeft, topRight],
-    [topRight, bottomRight],
-    [bottomRight, bottomLeft],
-    [bottomLeft, topLeft],
-  ];
-
-  for (let index = 0; index < points.length; index++) {
-    const start = points[index];
-    const end = points[(index + 1) % points.length];
-    if (rectEdges.some(([edgeStart, edgeEnd]) => lineSegmentsIntersect(start, end, edgeStart, edgeEnd))) {
-      return true;
-    }
-  }
-
-  return false;
+  return canvasHitTesting.segmentIdsInsideSelectionBox();
 }
 
 function polygonIdsInsideSelectionBox() {
-  if (!state.selectionBox) return [];
-  const rect = normalizedRect(state.selectionBox.start, state.selectionBox.end);
-  return state.polygons
-    .filter((polygon) => polygonIntersectsRect(polygon, rect))
-    .map((polygon) => polygon.id);
+  return canvasHitTesting.polygonIdsInsideSelectionBox();
 }
 
 function getReferenceLengthFromSegments(referenceId) {
@@ -3178,11 +3056,14 @@ canvas.addEventListener("pointerdown", (event) => {
     return;
   }
 
-  const hitEndpoint = findEndpointAt(event.clientX, event.clientY);
-  const hitLabel = hitEndpoint ? null : findLabelAt(event.clientX, event.clientY);
-  const hitSegment = hitEndpoint || hitLabel ? null : findSegmentAt(event.clientX, event.clientY);
-  const hitPolygonLabel = hitEndpoint || hitLabel || hitSegment ? null : findPolygonLabelAt(event.clientX, event.clientY);
-  const hitPolygon = hitEndpoint || hitLabel || hitSegment || hitPolygonLabel ? null : findPolygonAt(event.clientX, event.clientY);
+  const hit = canvasHitTesting.resolveHit(event.clientX, event.clientY);
+  const {
+    endpoint: hitEndpoint,
+    label: hitLabel,
+    segment: hitSegment,
+    polygonLabel: hitPolygonLabel,
+    polygon: hitPolygon,
+  } = hit;
   const touchInput = event.pointerType === "touch";
   const touchBasePick = touchInput
     && state.isChoosingBase
@@ -3420,10 +3301,15 @@ canvas.addEventListener("pointerup", (event) => {
 
   const wasClick = !state.didDrag;
   const hadSelectionBox = Boolean(state.selectionBox);
-  const hitLabel = wasClick ? findLabelAt(event.clientX, event.clientY) : null;
-  const hitSegment = wasClick && !hitLabel ? findSegmentAt(event.clientX, event.clientY) : null;
-  const hitPolygonLabel = wasClick && !hitLabel && !hitSegment ? findPolygonLabelAt(event.clientX, event.clientY) : null;
-  const hitPolygon = wasClick && !hitLabel && !hitSegment && !hitPolygonLabel ? findPolygonAt(event.clientX, event.clientY) : null;
+  const hit = wasClick
+    ? canvasHitTesting.resolveHit(event.clientX, event.clientY, { includeEndpoint: false })
+    : {};
+  const {
+    label: hitLabel = null,
+    segment: hitSegment = null,
+    polygonLabel: hitPolygonLabel = null,
+    polygon: hitPolygon = null,
+  } = hit;
   const completedMode = state.interactionMode;
   const completedDragStart = state.dragStart;
   const shouldAddPoint = state.isDrawingSegments && wasClick && (
