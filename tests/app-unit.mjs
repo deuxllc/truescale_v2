@@ -14,6 +14,8 @@ for (const file of [
   "planscale-seo/app/geometry.js",
   "planscale-seo/app/app-utils.js",
   "planscale-seo/app/measurement.js",
+  "planscale-seo/app/app-state.js",
+  "planscale-seo/app/app-history.js",
   "planscale-seo/app/project-format.js",
 ]) {
   vm.runInContext(await readFile(file, "utf8"), context, { filename: file });
@@ -22,6 +24,8 @@ for (const file of [
 const geometry = context.window.PlanScaleGeometry;
 const utils = context.window.PlanScaleUtils;
 const measurement = context.window.PlanScaleMeasurement;
+const appState = context.window.PlanScaleState;
+const appHistory = context.window.PlanScaleHistory;
 const projectFormat = context.window.PlanScaleProjectFormat;
 
 assert.equal(utils.parseDecimal("12,5"), 12.5);
@@ -108,5 +112,55 @@ const snapshot = projectFormat.snapshotFromProjectPayload(project, {
 });
 assert.equal(snapshot.referenceValueMeters, 5);
 assert.equal(snapshot.segments.length, 1);
+
+const initialState = appState.createAppState({
+  unit: "см",
+  unitSystem: "metric",
+  detectionSensitivity: 50,
+});
+assert.equal(initialState.unit, "см");
+assert.equal(initialState.detectionSensitivity, 50);
+assert.equal(initialState.segments.length, 0);
+assert.equal(initialState.selectedSegmentIds.size, 0);
+
+let currentSnapshot = { version: 1 };
+let savedSnapshot = null;
+let updateCount = 0;
+const appliedSnapshots = [];
+const history = appHistory.createHistoryController({
+  snapshotState: () => currentSnapshot,
+  applySnapshot: async (snapshot) => {
+    appliedSnapshots.push(snapshot);
+    currentSnapshot = snapshot;
+  },
+  saveSnapshotToStorage: (snapshot = currentSnapshot) => {
+    savedSnapshot = snapshot;
+  },
+  updateHistoryButtons: () => {
+    updateCount++;
+  },
+});
+
+history.commit();
+currentSnapshot = { version: 2 };
+history.commit();
+assert.equal(history.undoLength, 2);
+assert.equal(history.redoLength, 0);
+await history.undo();
+assert.equal(currentSnapshot.version, 1);
+assert.equal(history.undoLength, 1);
+assert.equal(history.redoLength, 1);
+await history.redo();
+assert.equal(currentSnapshot.version, 2);
+assert.equal(history.undoLength, 2);
+assert.equal(history.redoLength, 0);
+await history.runRestoring(async () => {
+  currentSnapshot = { version: 3 };
+  history.commit();
+});
+assert.equal(history.undoLength, 2);
+assert.equal(savedSnapshot.version, 2);
+assert.ok(updateCount >= 4);
+assert.equal(appliedSnapshots.length, 2);
 
 console.log("app-unit tests passed");

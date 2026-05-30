@@ -40,6 +40,12 @@ const {
   confirmAction,
 } = window.PlanScaleDialogs;
 const {
+  createAppState,
+} = window.PlanScaleState;
+const {
+  createHistoryController,
+} = window.PlanScaleHistory;
+const {
   createProjectPayload: buildProjectPayload,
   snapshotFromProjectPayload: buildSnapshotFromProjectPayload,
 } = window.PlanScaleProjectFormat;
@@ -165,64 +171,12 @@ const {
   TOUCH_ENDPOINT_DRAG_OFFSET,
 } = window.PlanScaleConfig;
 
-const state = {
-  image: null,
-  imageSrc: "",
-  imageName: "",
-  backgroundVisible: true,
-  backgroundOpacity: 1,
-  previousBackgroundOpacity: 1,
-  scale: 1,
-  homeScale: 1,
-  offsetX: 0,
-  offsetY: 0,
-  segments: [],
-  polygons: [],
-  referenceId: null,
-  referencePixelLength: null,
-  selectedSegmentIds: new Set(),
-  selectedPolygonIds: new Set(),
-  referenceValue: "",
-  referenceValueMeters: null,
-  unit: unitInput.value || "м",
-  unitSystem: IMPERIAL_UNITS.has(unitInput.value) ? "imperial" : "metric",
-  footnotesVisible: true,
-  measurementPrecision: 3,
-  footnoteSize: "normal",
-  showUnitsInFootnotes: true,
-  pendingPoint: null,
-  polygonPoints: [],
-  polygonPreviewPoint: null,
-  polygonCloseTarget: null,
-  isDragging: false,
-  dragStart: null,
-  didDrag: false,
-  interactionMode: null,
-  selectionBox: null,
-  labelBounds: new Map(),
-  polygonLabelBounds: new Map(),
-  snapPoint: null,
-  previewPoint: null,
-  orthogonalGuide: null,
-  alignmentGuide: null,
-  rightAngleHints: [],
-  rightAngleIds: new Set(),
-  detectedSegments: [],
-  smartGridEnabled: true,
-  nextActionPromptVisible: false,
-  workflowMode: null,
+const initialUnit = unitInput.value || "м";
+const state = createAppState({
+  unit: initialUnit,
+  unitSystem: IMPERIAL_UNITS.has(initialUnit) ? "imperial" : "metric",
   detectionSensitivity: Number(detectionSensitivityInput?.value) || DEFAULT_DETECTION_SENSITIVITY,
-  isEditingReferenceLength: false,
-  isDrawingSegments: false,
-  isDrawingArea: false,
-  isChoosingBase: false,
-  sidebarCollapsed: true,
-  isSpacePressed: false,
-  isAnalyzing: false,
-  hoveredSegmentId: null,
-  pendingReferenceId: null,
-  lastPointerUpAt: 0,
-};
+});
 
 const POLYGON_SNAP_OPTIONS = {
   axisFieldRadiusPx: Number.POSITIVE_INFINITY,
@@ -236,17 +190,18 @@ let nextPolygonId = 1;
 let analysisRunId = 0;
 let activeContextSegmentId = null;
 let resizeTimer = 0;
-const historyState = {
-  undo: [],
-  redo: [],
-  restoring: false,
-};
 let viewSaveTimer = 0;
 const activePointers = new Map();
 let pinchGesture = null;
 let longPressTimer = 0;
 let longPressSegment = null;
 let touchContextMenuOpened = false;
+const history = createHistoryController({
+  snapshotState,
+  applySnapshot,
+  saveSnapshotToStorage,
+  updateHistoryButtons,
+});
 const {
   setExportMenuOpen,
   toggleExportMenu,
@@ -512,8 +467,7 @@ function loadImage(src) {
 }
 
 async function applySnapshot(snapshot) {
-  historyState.restoring = true;
-  try {
+  return history.runRestoring(async () => {
     const imageChanged = snapshot.imageSrc !== state.imageSrc;
     state.imageSrc = snapshot.imageSrc || "";
     state.imageName = snapshot.imageName || "";
@@ -594,9 +548,7 @@ async function applySnapshot(snapshot) {
     updateToolControls();
     emptyState.hidden = Boolean(state.image);
     updateAll();
-  } finally {
-    historyState.restoring = false;
-  }
+  });
 }
 
 function saveSnapshotToStorage(snapshot = snapshotState()) {
@@ -707,8 +659,8 @@ function updateHistoryButtons() {
   const hasObjects = hasSegments || state.polygons.length > 0;
   const hasDetected = state.detectedSegments.length > 0;
   const hasSelection = state.selectedSegmentIds.size > 0 || state.selectedPolygonIds.size > 0;
-  undoButton.disabled = historyState.undo.length <= 1;
-  redoButton.disabled = historyState.redo.length === 0;
+  undoButton.disabled = history.undoLength <= 1;
+  redoButton.disabled = history.redoLength === 0;
   removeUnderlayButton.disabled = !hasImage;
   resetPlanButton.disabled = !hasImage && !hasObjects && !hasDetected;
   if (selectModeButton) selectModeButton.disabled = !hasImage;
@@ -926,35 +878,15 @@ function syncScaleRuler() {
 }
 
 function commitHistory() {
-  if (historyState.restoring) return;
-
-  const snapshot = snapshotState();
-  const previous = historyState.undo[historyState.undo.length - 1];
-  const serialized = JSON.stringify(snapshot);
-  if (!previous || JSON.stringify(previous) !== serialized) {
-    historyState.undo.push(snapshot);
-    historyState.redo = [];
-  }
-  saveSnapshotToStorage(snapshot);
-  updateHistoryButtons();
+  history.commit();
 }
 
 async function undoHistory() {
-  if (historyState.undo.length <= 1) return;
-  const current = historyState.undo.pop();
-  historyState.redo.push(current);
-  await applySnapshot(historyState.undo[historyState.undo.length - 1]);
-  saveSnapshotToStorage();
-  updateHistoryButtons();
+  await history.undo();
 }
 
 async function redoHistory() {
-  const snapshot = historyState.redo.pop();
-  if (!snapshot) return;
-  historyState.undo.push(snapshot);
-  await applySnapshot(snapshot);
-  saveSnapshotToStorage();
-  updateHistoryButtons();
+  await history.redo();
 }
 
 async function restoreSavedState() {
@@ -975,8 +907,7 @@ async function restoreSavedState() {
   try {
     const snapshot = JSON.parse(raw);
     await applySnapshot(snapshot);
-    historyState.undo = [snapshotState()];
-    historyState.redo = [];
+    history.replace({ undo: [snapshotState()], redo: [] });
     updateHistoryButtons();
   } catch {
     localStorage.removeItem(STORAGE_KEY);
@@ -3203,8 +3134,7 @@ async function resetPlan() {
   exportStatus.hidden = true;
   exportStatus.innerHTML = "";
   setExportMenuOpen(false);
-  historyState.undo = [];
-  historyState.redo = [];
+  history.clear();
   updateAll();
   syncCanvasAfterLayout();
   commitHistory();
@@ -3296,8 +3226,7 @@ function importProjectFile(file) {
     try {
       const payload = JSON.parse(String(reader.result || ""));
       const snapshot = snapshotFromProjectPayload(payload);
-      historyState.undo = [];
-      historyState.redo = [];
+      history.clear();
       await applySnapshot(snapshot);
       commitHistory();
       showToast("Проект загружен");

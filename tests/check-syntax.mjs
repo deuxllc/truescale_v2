@@ -10,6 +10,8 @@ const files = [
   "planscale-seo/app/geometry.js",
   "planscale-seo/app/measurement.js",
   "planscale-seo/app/app-dialogs.js",
+  "planscale-seo/app/app-state.js",
+  "planscale-seo/app/app-history.js",
   "planscale-seo/app/project-format.js",
   "planscale-seo/app/snap.js",
   "planscale-seo/app/segments-panel.js",
