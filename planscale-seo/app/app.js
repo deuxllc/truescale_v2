@@ -68,6 +68,9 @@ const {
   createPointerTracker,
 } = window.PlanScalePointerTracker;
 const {
+  createSegmentContextActions,
+} = window.PlanScaleSegmentContextActions;
+const {
   canvas,
   wrap,
   appShell,
@@ -206,7 +209,6 @@ const POLYGON_SNAP_OPTIONS = {
 let nextSegmentId = 1;
 let nextPolygonId = 1;
 let analysisRunId = 0;
-let activeContextSegmentId = null;
 let viewSaveTimer = 0;
 const pointerTracker = createPointerTracker();
 let longPressTimer = 0;
@@ -251,6 +253,21 @@ const canvasRenderer = createCanvasRenderer({
     polygonCentroid,
     roundedRectPath,
     syncCanvasOverlays,
+  },
+});
+const segmentContextActions = createSegmentContextActions({
+  canvas,
+  state,
+  menu: segmentContextMenu,
+  actions: {
+    commitHistory,
+    deleteSegment,
+    findLabelAt,
+    findSegmentAt,
+    requestDialog,
+    selectOnlySegment,
+    setReferenceSegment,
+    updateAll,
   },
 });
 const {
@@ -2215,33 +2232,11 @@ function toggleSettings() {
 }
 
 function hideSegmentContextMenu() {
-  segmentContextMenu.hidden = true;
-  activeContextSegmentId = null;
+  segmentContextActions.hide();
 }
 
 function showSegmentContextMenu(segment, clientX, clientY) {
-  activeContextSegmentId = segment.id;
-  selectOnlySegment(segment.id);
-  updateAll();
-  segmentContextMenu.hidden = false;
-  const menuRect = segmentContextMenu.getBoundingClientRect();
-  const left = Math.min(clientX, window.innerWidth - menuRect.width - 10);
-  const top = Math.min(clientY, window.innerHeight - menuRect.height - 10);
-  segmentContextMenu.style.left = `${Math.max(10, left)}px`;
-  segmentContextMenu.style.top = `${Math.max(10, top)}px`;
-}
-
-async function renameSegmentWithPrompt(segment) {
-  const nextName = await requestDialog({
-    title: "Название отрезка",
-    message: "Введите понятное имя для выбранного измерения.",
-    inputValue: segment.name,
-    confirmText: "Сохранить",
-  });
-  if (nextName === null) return;
-  segment.name = nextName.trim() || `Отрезок ${segment.id}`;
-  updateAll();
-  commitHistory();
+  segmentContextActions.show(segment, clientX, clientY);
 }
 
 function dismissWelcome() {
@@ -2953,26 +2948,6 @@ document.addEventListener("click", (event) => {
   setExportMenuOpen(false);
 });
 
-segmentContextMenu.addEventListener("click", (event) => {
-  const button = event.target instanceof HTMLElement ? event.target.closest("button[data-action]") : null;
-  if (!button) return;
-  const segment = state.segments.find((item) => item.id === activeContextSegmentId);
-  if (!segment) {
-    hideSegmentContextMenu();
-    return;
-  }
-
-  const action = button.dataset.action;
-  hideSegmentContextMenu();
-  if (action === "base") {
-    setReferenceSegment(segment.id);
-  } else if (action === "rename") {
-    renameSegmentWithPrompt(segment);
-  } else if (action === "delete") {
-    deleteSegment(segment.id);
-  }
-});
-
 welcomeStartButton.addEventListener("click", dismissWelcome);
 
 referenceLengthInput.addEventListener("input", () => {
@@ -3520,22 +3495,6 @@ canvas.addEventListener("pointerup", (event) => {
     state.pendingPoint = null;
     updateAll();
   }
-});
-
-canvas.addEventListener("dblclick", (event) => {
-  if (!state.image) return;
-  const segment = findLabelAt(event.clientX, event.clientY) || findSegmentAt(event.clientX, event.clientY);
-  if (!segment) return;
-  event.preventDefault();
-  renameSegmentWithPrompt(segment);
-});
-
-canvas.addEventListener("contextmenu", (event) => {
-  if (!state.image) return;
-  const segment = findLabelAt(event.clientX, event.clientY) || findSegmentAt(event.clientX, event.clientY);
-  if (!segment) return;
-  event.preventDefault();
-  showSegmentContextMenu(segment, event.clientX, event.clientY);
 });
 
 canvas.addEventListener("pointerleave", () => {
