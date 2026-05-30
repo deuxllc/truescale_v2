@@ -315,6 +315,24 @@ async function runCase(browser, origin, profile) {
     (afterKeyboardUndoJson.polygons || []).length === 0
     && (afterKeyboardRedoJson.polygons || []).length === 1,
   );
+  let keyboardDeleteUndo = false;
+  const keyboardDeleteTarget = (afterKeyboardRedoJson.segments || []).find((segment) => segment.id !== firstSegment?.id);
+  if (keyboardDeleteTarget) {
+    await page.locator("#selectModeButton").evaluate((node) => node.click());
+    const targetMidpoint = {
+      x: activeCanvasBox.x + fittedOffset.x + ((keyboardDeleteTarget.startX + keyboardDeleteTarget.endX) / 2) * fittedImageScale,
+      y: activeCanvasBox.y + fittedOffset.y + ((keyboardDeleteTarget.startY + keyboardDeleteTarget.endY) / 2) * fittedImageScale,
+    };
+    await page.mouse.click(targetMidpoint.x, targetMidpoint.y);
+    await page.keyboard.press("Delete");
+    const afterKeyboardDeleteJson = await exportJsonPayload();
+    await page.keyboard.press(undoShortcut);
+    const afterKeyboardDeleteUndoJson = await exportJsonPayload();
+    keyboardDeleteUndo = Boolean(
+      (afterKeyboardDeleteJson.segments || []).length === (afterKeyboardRedoJson.segments || []).length - 1
+      && (afterKeyboardDeleteUndoJson.segments || []).length === (afterKeyboardRedoJson.segments || []).length,
+    );
+  }
   let polygonMoved = false;
   if (polygonCreated) {
     const polygon = exportJson.polygons[0];
@@ -416,6 +434,7 @@ async function runCase(browser, origin, profile) {
     secondSegmentStartsFromExistingPoint: snappedSecondSegment,
     polygonCreated,
     keyboardUndoRedo,
+    keyboardDeleteUndo,
     polygonMoved,
     baseScalePreservedAfterDelete,
     exportReady: exportStatus?.includes("Экспорт готов") || false,
@@ -457,6 +476,7 @@ try {
     !result.secondSegmentStartsFromExistingPoint ||
     !result.polygonCreated ||
     !result.keyboardUndoRedo ||
+    !result.keyboardDeleteUndo ||
     !result.polygonMoved ||
     !result.baseScalePreservedAfterDelete ||
     !result.exportReady ||
