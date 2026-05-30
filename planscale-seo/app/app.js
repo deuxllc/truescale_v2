@@ -56,6 +56,9 @@ const {
   createCanvasRenderer,
 } = window.PlanScaleCanvasRenderer;
 const {
+  createCanvasWheelController,
+} = window.PlanScaleCanvasWheel;
+const {
   createKeyboardController,
 } = window.PlanScaleKeyboard;
 const {
@@ -320,6 +323,15 @@ createResizeController({
     resizeCanvas,
     syncCalibrationPlacement,
     updateToolControls,
+  },
+});
+createCanvasWheelController({
+  canvas,
+  state,
+  view: canvasView,
+  actions: {
+    draw,
+    scheduleViewSave,
   },
 });
 
@@ -1024,14 +1036,6 @@ function syncCanvasAfterLayout({ fit = false } = {}) {
 
 function fitImage() {
   canvasView.fitImage();
-}
-
-function normalizedWheelDelta(value, deltaMode) {
-  return canvasView.normalizedWheelDelta(value, deltaMode);
-}
-
-function clampViewScale(scale) {
-  return canvasView.clampScale(scale);
 }
 
 function zoomAtClientPoint(clientX, clientY, factor) {
@@ -3559,32 +3563,6 @@ canvas.addEventListener("pointercancel", (event) => {
     draw();
   }
 });
-
-canvas.addEventListener("wheel", (event) => {
-  if (!state.image) return;
-  event.preventDefault();
-
-  const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode);
-  const deltaY = normalizedWheelDelta(event.deltaY, event.deltaMode);
-  const shouldZoom = event.ctrlKey || event.metaKey || event.altKey;
-
-  if (!shouldZoom) {
-    canvasView.panBy(deltaX, deltaY);
-    draw();
-    scheduleViewSave();
-    return;
-  }
-
-  if (performance.now() - state.lastPointerUpAt < 240 || Math.abs(deltaY) < 1.5) {
-    return;
-  }
-
-  const rawFactor = Math.exp(-deltaY * 0.0025);
-  const factor = Math.min(Math.max(rawFactor, 0.75), 1.33);
-  zoomAtClientPoint(event.clientX, event.clientY, factor);
-  draw();
-  scheduleViewSave();
-}, { passive: false });
 
 smartGridToggle.addEventListener("change", () => {
   state.smartGridEnabled = smartGridToggle.checked;
