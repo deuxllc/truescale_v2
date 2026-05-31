@@ -19,6 +19,7 @@ for (const file of [
   "planscale-seo/app/project-format.js",
   "planscale-seo/app/canvas-hit-testing.js",
   "planscale-seo/app/app-selection.js",
+  "planscale-seo/app/canvas-drag-interactions.js",
   "planscale-seo/app/pointer-tracker.js",
   "planscale-seo/app/canvas-gesture-state.js",
 ]) {
@@ -33,6 +34,7 @@ const appHistory = context.window.PlanScaleHistory;
 const projectFormat = context.window.PlanScaleProjectFormat;
 const hitTesting = context.window.PlanScaleCanvasHitTesting;
 const selectionFactory = context.window.PlanScaleSelection;
+const dragInteractionsFactory = context.window.PlanScaleCanvasDragInteractions;
 const pointerTracking = context.window.PlanScalePointerTracker;
 const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
 
@@ -249,6 +251,81 @@ assert.deepEqual(selectedPolygons(), [10]);
 selection.clearSelection();
 assert.deepEqual(selectedSegments(), []);
 assert.deepEqual(selectedPolygons(), []);
+
+const dragSegment = {
+  id: 1,
+  start: { x: 0, y: 0 },
+  end: { x: 100, y: 0 },
+};
+let dragDraws = 0;
+let dragLongPressClears = 0;
+let dragMarks = 0;
+const dragState = {
+  interactionMode: "endpoint",
+  dragStart: {
+    x: 0,
+    y: 0,
+    screen: { x: 0, y: 0 },
+    endpoint: { segment: dragSegment, endpoint: "start" },
+  },
+  scale: 1,
+  snapPoint: null,
+  orthogonalGuide: null,
+  alignmentGuide: null,
+};
+const dragInteractions = dragInteractionsFactory.createCanvasDragInteractions({
+  state: dragState,
+  view: identityView,
+  actions: {
+    adjustedEndpointDragPoint: (event) => ({ x: event.clientX, y: event.clientY }),
+    clampPointToImage: (point) => point,
+    clearLongPressTimer: () => {
+      dragLongPressClears++;
+    },
+    draw: () => {
+      dragDraws++;
+    },
+    markDragged: () => {
+      dragMarks++;
+    },
+    polygonIdsInsideSelectionBox: () => [10],
+    resolveEndpointPoint: (point) => ({
+      point,
+      snap: { x: point.x, y: point.y },
+      guide: { axis: "horizontal" },
+      alignmentGuide: { axis: "vertical" },
+    }),
+    resolvePolygonPoint: (point) => ({
+      point,
+      close: false,
+      snap: null,
+      guide: null,
+      alignmentGuide: null,
+    }),
+    screenToImage: (clientX, clientY) => ({ x: clientX, y: clientY }),
+    segmentIdsInsideSelectionBox: () => [1, 2],
+    selectPolygons: (ids) => {
+      dragState.selectedPolygons = Array.from(ids);
+    },
+    selectSegments: (ids) => {
+      dragState.selectedSegments = Array.from(ids);
+    },
+  },
+});
+assert.equal(dragInteractions.handlePointerMove({ clientX: 20, clientY: 5 }), true);
+assert.deepEqual(dragSegment.start, { x: 20, y: 5 });
+assert.equal(dragLongPressClears, 1);
+assert.equal(dragMarks, 1);
+assert.equal(dragDraws, 2);
+assert.equal(dragState.orthogonalGuide.axis, "horizontal");
+
+dragState.interactionMode = "select";
+dragState.dragStart = { x: 0, y: 0, screen: { x: -1, y: -1 } };
+assert.equal(dragInteractions.handlePointerMove({ clientX: 8, clientY: 0 }), true);
+assert.equal(dragState.selectionBox.start.x, -1);
+assert.equal(dragState.selectionBox.end.x, 8);
+assert.deepEqual(dragState.selectedSegments, [1, 2]);
+assert.deepEqual(dragState.selectedPolygons, [10]);
 
 const gestureTestState = {
   isDragging: false,
