@@ -68,6 +68,9 @@ const {
   createCanvasDragInteractions,
 } = window.PlanScaleCanvasDragInteractions;
 const {
+  createCanvasPointerCleanup,
+} = window.PlanScaleCanvasPointerCleanup;
+const {
   createCanvasWheelController,
 } = window.PlanScaleCanvasWheel;
 const {
@@ -339,6 +342,16 @@ const canvasDragInteractions = createCanvasDragInteractions({
     segmentIdsInsideSelectionBox,
     selectPolygons,
     selectSegments,
+  },
+});
+const canvasPointerCleanup = createCanvasPointerCleanup({
+  canvas,
+  state,
+  pointerTracker,
+  gestureState,
+  actions: {
+    draw,
+    hideCursorCoordinates,
   },
 });
 const segmentContextActions = createSegmentContextActions({
@@ -3189,31 +3202,8 @@ canvas.addEventListener("pointerup", (event) => {
   }
 });
 
-canvas.addEventListener("pointerleave", () => {
-  hideCursorCoordinates();
-  if (state.isDragging) return;
-  state.hoveredSegmentId = null;
-  canvas.classList.remove("hovering-segment");
-  state.polygonPreviewPoint = null;
-  state.polygonCloseTarget = null;
-  if (!state.previewPoint && !state.orthogonalGuide && !state.alignmentGuide) {
-    draw();
-    return;
-  }
-  state.previewPoint = null;
-  state.orthogonalGuide = null;
-  state.alignmentGuide = null;
-  draw();
-});
-
-canvas.addEventListener("pointercancel", (event) => {
-  gestureState.clearLongPressTimer();
-  gestureState.removePointerFromEvent(event);
-  if (state.interactionMode === "pinch" || pointerTracker.activeCount() === 0) {
-    gestureState.resetTransient(null);
-    draw();
-  }
-});
+canvas.addEventListener("pointerleave", canvasPointerCleanup.handlePointerLeave);
+canvas.addEventListener("pointercancel", canvasPointerCleanup.handlePointerCancel);
 
 smartGridToggle.addEventListener("change", () => {
   state.smartGridEnabled = smartGridToggle.checked;

@@ -20,6 +20,7 @@ for (const file of [
   "planscale-seo/app/canvas-hit-testing.js",
   "planscale-seo/app/app-selection.js",
   "planscale-seo/app/canvas-drag-interactions.js",
+  "planscale-seo/app/canvas-pointer-cleanup.js",
   "planscale-seo/app/pointer-tracker.js",
   "planscale-seo/app/canvas-gesture-state.js",
 ]) {
@@ -35,6 +36,7 @@ const projectFormat = context.window.PlanScaleProjectFormat;
 const hitTesting = context.window.PlanScaleCanvasHitTesting;
 const selectionFactory = context.window.PlanScaleSelection;
 const dragInteractionsFactory = context.window.PlanScaleCanvasDragInteractions;
+const pointerCleanupFactory = context.window.PlanScaleCanvasPointerCleanup;
 const pointerTracking = context.window.PlanScalePointerTracker;
 const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
 
@@ -326,6 +328,65 @@ assert.equal(dragState.selectionBox.start.x, -1);
 assert.equal(dragState.selectionBox.end.x, 8);
 assert.deepEqual(dragState.selectedSegments, [1, 2]);
 assert.deepEqual(dragState.selectedPolygons, [10]);
+
+const removedCanvasClasses = [];
+const cleanupState = {
+  isDragging: false,
+  interactionMode: null,
+  hoveredSegmentId: 2,
+  polygonPreviewPoint: { x: 1, y: 1 },
+  polygonCloseTarget: { x: 2, y: 2 },
+  previewPoint: { x: 3, y: 3 },
+  orthogonalGuide: { axis: "horizontal" },
+  alignmentGuide: { axis: "vertical" },
+};
+let cleanupDraws = 0;
+let hiddenCoordinates = 0;
+let cleanupLongPressClears = 0;
+let cleanupPointerRemovals = 0;
+let cleanupTransientResets = 0;
+const pointerCleanup = pointerCleanupFactory.createCanvasPointerCleanup({
+  canvas: {
+    classList: {
+      remove: (className) => removedCanvasClasses.push(className),
+    },
+  },
+  state: cleanupState,
+  pointerTracker: {
+    activeCount: () => 0,
+  },
+  gestureState: {
+    clearLongPressTimer: () => {
+      cleanupLongPressClears++;
+    },
+    removePointerFromEvent: () => {
+      cleanupPointerRemovals++;
+    },
+    resetTransient: () => {
+      cleanupTransientResets++;
+    },
+  },
+  actions: {
+    draw: () => {
+      cleanupDraws++;
+    },
+    hideCursorCoordinates: () => {
+      hiddenCoordinates++;
+    },
+  },
+});
+pointerCleanup.handlePointerLeave();
+assert.equal(hiddenCoordinates, 1);
+assert.equal(cleanupDraws, 1);
+assert.equal(cleanupState.hoveredSegmentId, null);
+assert.equal(cleanupState.previewPoint, null);
+assert.equal(cleanupState.polygonPreviewPoint, null);
+assert.deepEqual(removedCanvasClasses, ["hovering-segment"]);
+pointerCleanup.handlePointerCancel({ pointerId: 7 });
+assert.equal(cleanupLongPressClears, 1);
+assert.equal(cleanupPointerRemovals, 1);
+assert.equal(cleanupTransientResets, 1);
+assert.equal(cleanupDraws, 2);
 
 const gestureTestState = {
   isDragging: false,
