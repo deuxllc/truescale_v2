@@ -18,6 +18,8 @@ for (const file of [
   "planscale-seo/app/app-history.js",
   "planscale-seo/app/project-format.js",
   "planscale-seo/app/canvas-hit-testing.js",
+  "planscale-seo/app/pointer-tracker.js",
+  "planscale-seo/app/canvas-gesture-state.js",
 ]) {
   vm.runInContext(await readFile(file, "utf8"), context, { filename: file });
 }
@@ -29,6 +31,8 @@ const appState = context.window.PlanScaleState;
 const appHistory = context.window.PlanScaleHistory;
 const projectFormat = context.window.PlanScaleProjectFormat;
 const hitTesting = context.window.PlanScaleCanvasHitTesting;
+const pointerTracking = context.window.PlanScalePointerTracker;
+const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
 
 assert.equal(utils.parseDecimal("12,5"), 12.5);
 assert.equal(utils.parseDecimal(" 1 200.25 "), 1200.25);
@@ -210,5 +214,61 @@ assert.equal(hit.findPolygonAt(250, 250)?.id, 10);
 assert.deepEqual(hit.segmentIdsInsideSelectionBox(), [1, 2]);
 hitState.selectionBox = { start: { x: 205, y: 205 }, end: { x: 255, y: 255 } };
 assert.deepEqual(hit.polygonIdsInsideSelectionBox(), [10]);
+
+const gestureTestState = {
+  isDragging: false,
+  dragStart: null,
+  didDrag: false,
+  interactionMode: null,
+  selectionBox: { start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
+  snapPoint: { x: 1, y: 1 },
+  previewPoint: { x: 2, y: 2 },
+  orthogonalGuide: { axis: "horizontal" },
+  alignmentGuide: { axis: "vertical" },
+  polygonPreviewPoint: { x: 3, y: 3 },
+  polygonCloseTarget: { x: 4, y: 4 },
+  offsetX: 7,
+  offsetY: 9,
+};
+const canvasClasses = new Set();
+const fakeCanvas = {
+  classList: {
+    add: (className) => canvasClasses.add(className),
+    remove: (className) => canvasClasses.delete(className),
+  },
+  setPointerCapture: () => {},
+  hasPointerCapture: () => false,
+  releasePointerCapture: () => {},
+};
+const gesture = gestureStateFactory.createCanvasGestureState({
+  canvas: fakeCanvas,
+  state: gestureTestState,
+  view: identityView,
+  pointerTracker: pointerTracking.createPointerTracker(),
+  touchLongPressMs: 1,
+  actions: {
+    selectOnlySegment: () => {},
+    showSegmentContextMenu: () => {},
+    updateAll: () => {},
+  },
+});
+gesture.beginDrag({ clientX: 12, clientY: 18 }, { custom: true });
+assert.equal(gestureTestState.isDragging, true);
+assert.equal(gestureTestState.didDrag, false);
+assert.equal(gestureTestState.dragStart.custom, true);
+assert.deepEqual(gestureTestState.dragStart.screen, { x: 12, y: 18 });
+assert.equal(canvasClasses.has("dragging"), true);
+gesture.markDragged();
+assert.equal(gestureTestState.didDrag, true);
+gesture.endDrag();
+assert.equal(gestureTestState.isDragging, false);
+assert.equal(gestureTestState.dragStart, null);
+assert.equal(gestureTestState.interactionMode, null);
+assert.equal(gestureTestState.didDrag, true);
+assert.equal(canvasClasses.has("dragging"), false);
+gesture.resetTransient("pinch");
+assert.equal(gestureTestState.interactionMode, "pinch");
+assert.equal(gestureTestState.selectionBox, null);
+assert.equal(gestureTestState.polygonCloseTarget, null);
 
 console.log("app-unit tests passed");

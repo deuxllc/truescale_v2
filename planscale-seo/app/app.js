@@ -71,6 +71,9 @@ const {
   createPointerTracker,
 } = window.PlanScalePointerTracker;
 const {
+  createCanvasGestureState,
+} = window.PlanScaleCanvasGestureState;
+const {
   createSegmentContextActions,
 } = window.PlanScaleSegmentContextActions;
 const {
@@ -214,9 +217,6 @@ let nextPolygonId = 1;
 let analysisRunId = 0;
 let viewSaveTimer = 0;
 const pointerTracker = createPointerTracker();
-let longPressTimer = 0;
-let longPressSegment = null;
-let touchContextMenuOpened = false;
 const history = createHistoryController({
   snapshotState,
   applySnapshot,
@@ -244,6 +244,18 @@ const canvasHitTesting = createCanvasHitTesting({
     lineSegmentsIntersect,
     normalizedRect,
     pointInsideRect,
+  },
+});
+const gestureState = createCanvasGestureState({
+  canvas,
+  state,
+  view: canvasView,
+  pointerTracker,
+  touchLongPressMs: TOUCH_LONG_PRESS_MS,
+  actions: {
+    selectOnlySegment,
+    showSegmentContextMenu,
+    updateAll,
   },
 });
 const canvasRenderer = createCanvasRenderer({
@@ -1072,77 +1084,6 @@ function fitImage() {
 
 function zoomAtClientPoint(clientX, clientY, factor) {
   canvasView.zoomAtClientPoint(clientX, clientY, factor);
-}
-
-function clearLongPressTimer() {
-  window.clearTimeout(longPressTimer);
-  longPressTimer = 0;
-  longPressSegment = null;
-}
-
-function resetTransientGestureState(mode = null) {
-  state.isDragging = false;
-  state.dragStart = null;
-  state.didDrag = false;
-  state.interactionMode = mode;
-  state.selectionBox = null;
-  state.snapPoint = null;
-  state.previewPoint = null;
-  state.orthogonalGuide = null;
-  state.alignmentGuide = null;
-  state.polygonPreviewPoint = null;
-  state.polygonCloseTarget = null;
-  canvas.classList.remove("dragging");
-}
-
-function safeSetPointerCapture(pointerId) {
-  try {
-    canvas.setPointerCapture(pointerId);
-  } catch {
-    // Some mobile WebViews can reject capture while still delivering pointer events.
-  }
-}
-
-function safeReleasePointerCapture(pointerId) {
-  try {
-    if (canvas.hasPointerCapture(pointerId)) {
-      canvas.releasePointerCapture(pointerId);
-    }
-  } catch {
-    // Pointer capture may already be gone after touch cancellation.
-  }
-}
-
-function startPinchGesture() {
-  const metrics = pointerTracker.pairMetrics();
-  if (!metrics || metrics.distance < 1) return;
-  pointerTracker.startPinch(metrics.distance);
-  clearLongPressTimer();
-  resetTransientGestureState("pinch");
-}
-
-function updatePointerFromEvent(event) {
-  pointerTracker.updateFromEvent(event);
-}
-
-function removePointerFromEvent(event) {
-  pointerTracker.removeFromEvent(event);
-}
-
-function scheduleTouchContextMenu(segment, event) {
-  clearLongPressTimer();
-  if (!segment || event.pointerType !== "touch" || state.isDrawingSegments || state.isChoosingBase) return;
-  const { clientX, clientY } = event;
-  longPressSegment = segment;
-  longPressTimer = window.setTimeout(() => {
-    if (!longPressSegment || pointerTracker.activeCount() > 1) return;
-    selectOnlySegment(longPressSegment.id);
-    resetTransientGestureState(null);
-    touchContextMenuOpened = true;
-    updateAll();
-    showSegmentContextMenu(longPressSegment, clientX, clientY);
-    longPressSegment = null;
-  }, TOUCH_LONG_PRESS_MS);
 }
 
 function canvasLogicalSize() {
@@ -3013,11 +2954,11 @@ if (toggleAllFootnotesButton) {
 
 canvas.addEventListener("pointerdown", (event) => {
   if (!state.image) return;
-  updatePointerFromEvent(event);
-  safeSetPointerCapture(event.pointerId);
+  gestureState.updatePointerFromEvent(event);
+  gestureState.setPointerCapture(event.pointerId);
   if (event.pointerType === "touch" && pointerTracker.activeCount() >= 2) {
     event.preventDefault();
-    startPinchGesture();
+    gestureState.startPinchGesture();
     updateAll();
     return;
   }
@@ -3025,9 +2966,6 @@ canvas.addEventListener("pointerdown", (event) => {
   if (state.isDrawingSegments || state.isDrawingArea) {
     event.preventDefault();
     const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-    state.isDragging = true;
-    state.didDrag = false;
-    touchContextMenuOpened = false;
     state.snapPoint = null;
     state.orthogonalGuide = null;
     state.alignmentGuide = null;
@@ -3044,15 +2982,8 @@ canvas.addEventListener("pointerdown", (event) => {
       state.alignmentGuide = resolved.alignmentGuide;
     }
     state.interactionMode = state.isDrawingArea ? "draw-area" : "draw-line";
-    state.dragStart = {
-      x: event.clientX,
-      y: event.clientY,
-      screen: screenPointFromClient(event.clientX, event.clientY),
-      offsetX: state.offsetX,
-      offsetY: state.offsetY,
-    };
+    gestureState.beginDrag(event);
     updateAll();
-    canvas.classList.add("dragging");
     return;
   }
 
@@ -3079,9 +3010,6 @@ canvas.addEventListener("pointerdown", (event) => {
     && !hitPolygon;
   const wantsPan = event.button === 1 || state.isSpacePressed || touchEmptyPan;
 
-  state.isDragging = true;
-  state.didDrag = false;
-  touchContextMenuOpened = false;
   state.snapPoint = null;
   state.orthogonalGuide = null;
   state.alignmentGuide = null;
@@ -3126,12 +3054,7 @@ canvas.addEventListener("pointerdown", (event) => {
     state.interactionMode = "select";
   }
 
-  state.dragStart = {
-    x: event.clientX,
-    y: event.clientY,
-    screen: screenPointFromClient(event.clientX, event.clientY),
-    offsetX: state.offsetX,
-    offsetY: state.offsetY,
+  gestureState.beginDrag(event, {
     endpoint: hitEndpoint,
     labelSegment: hitLabel,
     hitSegment: hitLabel || hitSegment,
@@ -3140,14 +3063,13 @@ canvas.addEventListener("pointerdown", (event) => {
       ? (hitPolygonLabel || hitPolygon).points.map(clonePoint)
       : null,
     labelOffset: hitLabel ? currentLabelOffset(hitLabel) : { x: 0, y: -36 },
-  };
-  scheduleTouchContextMenu(hitLabel || hitSegment, event);
+  });
+  gestureState.scheduleTouchContextMenu(hitLabel || hitSegment, event);
   updateAll();
-  canvas.classList.add("dragging");
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  updatePointerFromEvent(event);
+  gestureState.updatePointerFromEvent(event);
   if (pointerTracker.hasPinch() && event.pointerType === "touch" && pointerTracker.activeCount() >= 2) {
     event.preventDefault();
     const metrics = pointerTracker.pairMetrics();
@@ -3205,9 +3127,9 @@ canvas.addEventListener("pointermove", (event) => {
 
   if (distance > 4) {
     if (distance > 10) {
-      clearLongPressTimer();
+      gestureState.clearLongPressTimer();
     }
-    state.didDrag = true;
+    gestureState.markDragged();
 
     if (state.interactionMode === "endpoint" && state.dragStart.endpoint) {
       const { segment, endpoint } = state.dragStart.endpoint;
@@ -3279,24 +3201,22 @@ canvas.addEventListener("pointermove", (event) => {
 
 canvas.addEventListener("pointerup", (event) => {
   if (!state.image) return;
-  clearLongPressTimer();
-  removePointerFromEvent(event);
-  safeReleasePointerCapture(event.pointerId);
-  if (touchContextMenuOpened) {
-    touchContextMenuOpened = false;
-    resetTransientGestureState(null);
+  gestureState.clearLongPressTimer();
+  gestureState.removePointerFromEvent(event);
+  gestureState.releasePointerCapture(event.pointerId);
+  if (gestureState.consumeTouchContextMenuOpened()) {
+    gestureState.resetTransient(null);
     state.lastPointerUpAt = performance.now();
     draw();
     return;
   }
   if (pointerTracker.hasPinch() || state.interactionMode === "pinch") {
-    resetTransientGestureState(null);
+    gestureState.resetTransient(null);
     state.lastPointerUpAt = performance.now();
     scheduleViewSave();
     draw();
     return;
   }
-  canvas.classList.remove("dragging");
   state.lastPointerUpAt = performance.now();
 
   const wasClick = !state.didDrag;
@@ -3316,13 +3236,7 @@ canvas.addEventListener("pointerup", (event) => {
     completedMode === "draw-line" || (!hitLabel && !hitSegment && completedMode !== "endpoint")
   );
   const shouldAddPolygonPoint = state.isDrawingArea && wasClick && completedMode === "draw-area";
-  state.isDragging = false;
-  state.dragStart = null;
-  state.interactionMode = null;
-  state.snapPoint = null;
-  state.previewPoint = null;
-  state.orthogonalGuide = null;
-  state.alignmentGuide = null;
+  gestureState.endDrag();
 
   if (shouldAddPolygonPoint) {
     const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
@@ -3401,10 +3315,10 @@ canvas.addEventListener("pointerleave", () => {
 });
 
 canvas.addEventListener("pointercancel", (event) => {
-  clearLongPressTimer();
-  removePointerFromEvent(event);
+  gestureState.clearLongPressTimer();
+  gestureState.removePointerFromEvent(event);
   if (state.interactionMode === "pinch" || pointerTracker.activeCount() === 0) {
-    resetTransientGestureState(null);
+    gestureState.resetTransient(null);
     draw();
   }
 });
