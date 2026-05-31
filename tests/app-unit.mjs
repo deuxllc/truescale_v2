@@ -18,6 +18,7 @@ for (const file of [
   "planscale-seo/app/app-history.js",
   "planscale-seo/app/project-format.js",
   "planscale-seo/app/canvas-hit-testing.js",
+  "planscale-seo/app/app-selection.js",
   "planscale-seo/app/pointer-tracker.js",
   "planscale-seo/app/canvas-gesture-state.js",
 ]) {
@@ -31,6 +32,7 @@ const appState = context.window.PlanScaleState;
 const appHistory = context.window.PlanScaleHistory;
 const projectFormat = context.window.PlanScaleProjectFormat;
 const hitTesting = context.window.PlanScaleCanvasHitTesting;
+const selectionFactory = context.window.PlanScaleSelection;
 const pointerTracking = context.window.PlanScalePointerTracker;
 const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
 
@@ -214,6 +216,39 @@ assert.equal(hit.findPolygonAt(250, 250)?.id, 10);
 assert.deepEqual(hit.segmentIdsInsideSelectionBox(), [1, 2]);
 hitState.selectionBox = { start: { x: 205, y: 205 }, end: { x: 255, y: 255 } };
 assert.deepEqual(hit.polygonIdsInsideSelectionBox(), [10]);
+
+const selectionState = {
+  selectedSegmentIds: new Set(),
+  selectedPolygonIds: new Set(),
+};
+const selection = selectionFactory.createSelectionController({
+  state: selectionState,
+  hitTesting: {
+    segmentIdsInsideSelectionBox: () => [1, 2],
+    polygonIdsInsideSelectionBox: () => [10],
+  },
+});
+const selectedSegments = () => Array.from(selection.getSelectedIds());
+const selectedPolygons = () => Array.from(selection.getSelectedPolygonIds());
+selection.selectOnlySegment(3);
+assert.deepEqual(selectedSegments(), [3]);
+assert.deepEqual(selectedPolygons(), []);
+assert.equal(selection.isSegmentSelected({ id: 3 }), true);
+selection.toggleSegmentSelection(4);
+assert.deepEqual(selectedSegments().sort((a, b) => a - b), [3, 4]);
+selection.toggleSegmentSelection(3);
+assert.deepEqual(selectedSegments(), [4]);
+selection.selectOnlyPolygon(8);
+assert.deepEqual(selectedSegments(), []);
+assert.deepEqual(selectedPolygons(), [8]);
+assert.equal(selection.isPolygonSelected({ id: 8 }), true);
+selection.selectSegments(selection.segmentIdsInsideSelectionBox());
+selection.selectPolygons(selection.polygonIdsInsideSelectionBox());
+assert.deepEqual(selectedSegments(), [1, 2]);
+assert.deepEqual(selectedPolygons(), [10]);
+selection.clearSelection();
+assert.deepEqual(selectedSegments(), []);
+assert.deepEqual(selectedPolygons(), []);
 
 const gestureTestState = {
   isDragging: false,

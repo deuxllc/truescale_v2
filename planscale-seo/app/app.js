@@ -56,6 +56,9 @@ const {
   createCanvasHitTesting,
 } = window.PlanScaleCanvasHitTesting;
 const {
+  createSelectionController,
+} = window.PlanScaleSelection;
+const {
   createCanvasRenderer,
 } = window.PlanScaleCanvasRenderer;
 const {
@@ -248,6 +251,23 @@ const canvasHitTesting = createCanvasHitTesting({
     normalizedRect,
     pointInsideRect,
   },
+});
+const {
+  clearSelection,
+  getSelectedIds,
+  getSelectedPolygonIds,
+  isPolygonSelected,
+  isSegmentSelected,
+  polygonIdsInsideSelectionBox,
+  segmentIdsInsideSelectionBox,
+  selectOnlyPolygon,
+  selectOnlySegment,
+  selectPolygons,
+  selectSegments,
+  toggleSegmentSelection,
+} = createSelectionController({
+  state,
+  hitTesting: canvasHitTesting,
 });
 const gestureState = createCanvasGestureState({
   canvas,
@@ -1416,50 +1436,8 @@ function computeRightAngleHints() {
   return { hints, ids };
 }
 
-function isSegmentSelected(segment) {
-  return state.selectedSegmentIds.has(segment.id);
-}
-
-function isPolygonSelected(polygon) {
-  return state.selectedPolygonIds.has(polygon.id);
-}
-
 function isCoarsePointer() {
   return window.matchMedia("(pointer: coarse)").matches;
-}
-
-function selectOnlySegment(id) {
-  state.selectedSegmentIds = id === null ? new Set() : new Set([id]);
-  state.selectedPolygonIds = new Set();
-}
-
-function selectSegments(ids) {
-  state.selectedSegmentIds = new Set(ids);
-}
-
-function selectPolygons(ids) {
-  state.selectedPolygonIds = new Set(ids);
-}
-
-function selectOnlyPolygon(id) {
-  state.selectedSegmentIds = new Set();
-  state.selectedPolygonIds = id === null ? new Set() : new Set([id]);
-}
-
-function toggleSegmentSelection(id) {
-  const selected = new Set(state.selectedSegmentIds);
-  if (selected.has(id)) {
-    selected.delete(id);
-  } else {
-    selected.add(id);
-  }
-  state.selectedSegmentIds = selected;
-  state.selectedPolygonIds = new Set();
-}
-
-function clearSelection() {
-  state.selectedSegmentIds = new Set();
-  state.selectedPolygonIds = new Set();
 }
 
 function adjustedEndpointDragPoint(event) {
@@ -1593,22 +1571,6 @@ function confirmPendingReference() {
   if (!id) return;
   setReferenceSegment(id, { focusLength: !isCoarsePointer() });
   showToast("Теперь введите базовый размер");
-}
-
-function getSelectedIds() {
-  return [...state.selectedSegmentIds];
-}
-
-function getSelectedPolygonIds() {
-  return [...state.selectedPolygonIds];
-}
-
-function segmentIdsInsideSelectionBox() {
-  return canvasHitTesting.segmentIdsInsideSelectionBox();
-}
-
-function polygonIdsInsideSelectionBox() {
-  return canvasHitTesting.polygonIdsInsideSelectionBox();
 }
 
 function getReferenceLengthFromSegments(referenceId) {
