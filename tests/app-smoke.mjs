@@ -267,6 +267,40 @@ async function runCase(browser, origin, profile) {
     x: (activeCanvasBox.width - 800 * fittedImageScale) / 2,
     y: (activeCanvasBox.height - 520 * fittedImageScale) / 2,
   };
+  const undoShortcut = process.platform === "darwin" ? "Meta+Z" : "Control+Z";
+  const redoShortcut = process.platform === "darwin" ? "Meta+Shift+Z" : "Control+Shift+Z";
+  let endpointDragUndo = false;
+  if (baseSegment) {
+    await page.locator("#selectModeButton").evaluate((node) => node.click());
+    const baseEnd = {
+      x: activeCanvasBox.x + fittedOffset.x + baseSegment.endX * fittedImageScale,
+      y: activeCanvasBox.y + fittedOffset.y + baseSegment.endY * fittedImageScale,
+    };
+    await page.mouse.move(baseEnd.x, baseEnd.y);
+    await page.mouse.down();
+    await page.mouse.move(baseEnd.x + 46, baseEnd.y + 18, { steps: 6 });
+    await page.mouse.up();
+    const afterEndpointDragJson = await exportJsonPayload();
+    const draggedBase = afterEndpointDragJson.segments?.find((segment) => segment.id === baseSegment.id);
+    const endpointDragged = Boolean(
+      draggedBase
+      && Math.hypot(draggedBase.endX - baseSegment.endX, draggedBase.endY - baseSegment.endY) > 8
+    );
+    if (endpointDragged) {
+      await page.keyboard.press(undoShortcut);
+      const afterEndpointDragUndoJson = await exportJsonPayload();
+      const restoredBase = afterEndpointDragUndoJson.segments?.find((segment) => segment.id === baseSegment.id);
+      endpointDragUndo = Boolean(
+        restoredBase
+        && Math.hypot(restoredBase.endX - baseSegment.endX, restoredBase.endY - baseSegment.endY) < 0.01
+      );
+    }
+  }
+  await page.locator("#drawSegmentButton").evaluate((node) => {
+    if (node.getAttribute("aria-pressed") !== "true") {
+      node.click();
+    }
+  });
   const snapStartPoint = baseSegment
     ? {
       x: activeCanvasBox.x + fittedOffset.x + baseSegment.startX * fittedImageScale,
@@ -305,8 +339,6 @@ async function runCase(browser, origin, profile) {
     && Math.abs(segment.startY - firstSegment.startY) < 0.01
   )));
   const polygonCreated = Boolean((exportJson.polygons || []).length === 1 && exportJson.polygons[0].area > 0);
-  const undoShortcut = process.platform === "darwin" ? "Meta+Z" : "Control+Z";
-  const redoShortcut = process.platform === "darwin" ? "Meta+Shift+Z" : "Control+Shift+Z";
   await page.keyboard.press(undoShortcut);
   const afterKeyboardUndoJson = await exportJsonPayload();
   await page.keyboard.press(redoShortcut);
@@ -434,6 +466,7 @@ async function runCase(browser, origin, profile) {
     secondSegmentStartsFromExistingPoint: snappedSecondSegment,
     polygonCreated,
     keyboardUndoRedo,
+    endpointDragUndo,
     keyboardDeleteUndo,
     polygonMoved,
     baseScalePreservedAfterDelete,
@@ -476,6 +509,7 @@ try {
     !result.secondSegmentStartsFromExistingPoint ||
     !result.polygonCreated ||
     !result.keyboardUndoRedo ||
+    !result.endpointDragUndo ||
     !result.keyboardDeleteUndo ||
     !result.polygonMoved ||
     !result.baseScalePreservedAfterDelete ||
