@@ -20,6 +20,7 @@ for (const file of [
   "planscale-seo/app/canvas-hit-testing.js",
   "planscale-seo/app/app-selection.js",
   "planscale-seo/app/canvas-drag-interactions.js",
+  "planscale-seo/app/canvas-pointer-down.js",
   "planscale-seo/app/canvas-pointer-cleanup.js",
   "planscale-seo/app/pointer-tracker.js",
   "planscale-seo/app/canvas-gesture-state.js",
@@ -36,6 +37,7 @@ const projectFormat = context.window.PlanScaleProjectFormat;
 const hitTesting = context.window.PlanScaleCanvasHitTesting;
 const selectionFactory = context.window.PlanScaleSelection;
 const dragInteractionsFactory = context.window.PlanScaleCanvasDragInteractions;
+const pointerDownFactory = context.window.PlanScaleCanvasPointerDown;
 const pointerCleanupFactory = context.window.PlanScaleCanvasPointerCleanup;
 const pointerTracking = context.window.PlanScalePointerTracker;
 const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
@@ -328,6 +330,134 @@ assert.equal(dragState.selectionBox.start.x, -1);
 assert.equal(dragState.selectionBox.end.x, 8);
 assert.deepEqual(dragState.selectedSegments, [1, 2]);
 assert.deepEqual(dragState.selectedPolygons, [10]);
+
+function createPointerDownHarness(stateOverrides = {}, hit = {}) {
+  const calls = [];
+  const state = {
+    image: true,
+    isDrawingSegments: false,
+    isDrawingArea: false,
+    isChoosingBase: false,
+    isSpacePressed: false,
+    pendingPoint: null,
+    interactionMode: null,
+    snapPoint: { x: 1, y: 1 },
+    orthogonalGuide: { axis: "horizontal" },
+    alignmentGuide: { axis: "vertical" },
+    selectionBox: { start: { x: 0, y: 0 }, end: { x: 1, y: 1 } },
+    ...stateOverrides,
+  };
+  const controller = pointerDownFactory.createCanvasPointerDownController({
+    state,
+    pointerTracker: {
+      activeCount: () => state.activePointers || 0,
+    },
+    hitTesting: {
+      resolveHit: () => hit,
+    },
+    actions: {
+      beginDrag: (event, dragStart = {}) => {
+        calls.push(["beginDrag", dragStart]);
+      },
+      clonePoint: (point) => ({ x: point.x, y: point.y }),
+      clampPointToImage: (point) => point,
+      currentLabelOffset: () => ({ x: 11, y: -22 }),
+      resolvePolygonPoint: (point) => ({
+        point,
+        close: true,
+        snap: { x: point.x, y: point.y },
+        guide: { axis: "horizontal" },
+        alignmentGuide: { axis: "vertical" },
+      }),
+      resolveStartPoint: (point) => ({
+        point,
+        snap: { x: point.x, y: point.y },
+      }),
+      scheduleTouchContextMenu: (segment) => {
+        calls.push(["scheduleTouchContextMenu", segment?.id ?? null]);
+      },
+      screenToImage: (clientX, clientY) => ({ x: clientX, y: clientY }),
+      selectOnlyPolygon: (id) => {
+        calls.push(["selectOnlyPolygon", id]);
+      },
+      selectOnlySegment: (id) => {
+        calls.push(["selectOnlySegment", id]);
+      },
+      setPointerCapture: (pointerId) => {
+        calls.push(["setPointerCapture", pointerId]);
+      },
+      startPinchGesture: () => {
+        calls.push(["startPinchGesture"]);
+      },
+      toggleSegmentSelection: (id) => {
+        calls.push(["toggleSegmentSelection", id]);
+      },
+      updateAll: () => {
+        calls.push(["updateAll"]);
+      },
+      updatePointerFromEvent: () => {
+        calls.push(["updatePointerFromEvent"]);
+      },
+    },
+  });
+  return { calls, controller, state };
+}
+
+const pinchHarness = createPointerDownHarness({ activePointers: 2 });
+let pinchPrevented = false;
+assert.equal(pinchHarness.controller.handlePointerDown({
+  pointerId: 1,
+  pointerType: "touch",
+  clientX: 10,
+  clientY: 20,
+  preventDefault: () => {
+    pinchPrevented = true;
+  },
+}), true);
+assert.equal(pinchPrevented, true);
+assert.equal(pinchHarness.calls.some((call) => call[0] === "startPinchGesture"), true);
+
+const drawAreaHarness = createPointerDownHarness({ isDrawingArea: true });
+let drawAreaPrevented = false;
+assert.equal(drawAreaHarness.controller.handlePointerDown({
+  pointerId: 2,
+  pointerType: "mouse",
+  clientX: 12,
+  clientY: 24,
+  preventDefault: () => {
+    drawAreaPrevented = true;
+  },
+}), true);
+assert.equal(drawAreaPrevented, true);
+assert.equal(drawAreaHarness.state.interactionMode, "draw-area");
+assert.equal(drawAreaHarness.state.polygonPreviewPoint.x, 12);
+assert.equal(drawAreaHarness.state.snapPoint.y, 24);
+
+const labelHit = { label: { id: 5 }, segment: null };
+const labelHarness = createPointerDownHarness({}, labelHit);
+assert.equal(labelHarness.controller.handlePointerDown({
+  pointerId: 3,
+  pointerType: "mouse",
+  button: 0,
+  clientX: 1,
+  clientY: 2,
+  shiftKey: false,
+}), true);
+assert.equal(labelHarness.state.interactionMode, "label");
+assert.deepEqual(labelHarness.calls.find((call) => call[0] === "selectOnlySegment"), ["selectOnlySegment", 5]);
+assert.equal(labelHarness.calls.some((call) => call[0] === "scheduleTouchContextMenu" && call[1] === 5), true);
+
+const basePickHit = { segment: { id: 9 } };
+const basePickHarness = createPointerDownHarness({ isChoosingBase: true }, basePickHit);
+basePickHarness.controller.handlePointerDown({
+  pointerId: 4,
+  pointerType: "touch",
+  button: 0,
+  clientX: 1,
+  clientY: 2,
+});
+assert.equal(basePickHarness.state.interactionMode, "base-pick");
+assert.deepEqual(basePickHarness.calls.find((call) => call[0] === "selectOnlySegment"), ["selectOnlySegment", 9]);
 
 const removedCanvasClasses = [];
 const cleanupState = {

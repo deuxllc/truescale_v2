@@ -68,6 +68,9 @@ const {
   createCanvasDragInteractions,
 } = window.PlanScaleCanvasDragInteractions;
 const {
+  createCanvasPointerDownController,
+} = window.PlanScaleCanvasPointerDown;
+const {
   createCanvasPointerCleanup,
 } = window.PlanScaleCanvasPointerCleanup;
 const {
@@ -342,6 +345,28 @@ const canvasDragInteractions = createCanvasDragInteractions({
     segmentIdsInsideSelectionBox,
     selectPolygons,
     selectSegments,
+  },
+});
+const canvasPointerDown = createCanvasPointerDownController({
+  state,
+  pointerTracker,
+  hitTesting: canvasHitTesting,
+  actions: {
+    beginDrag: gestureState.beginDrag,
+    clonePoint,
+    clampPointToImage,
+    currentLabelOffset,
+    resolvePolygonPoint,
+    resolveStartPoint,
+    scheduleTouchContextMenu: gestureState.scheduleTouchContextMenu,
+    screenToImage,
+    selectOnlyPolygon,
+    selectOnlySegment,
+    setPointerCapture: gestureState.setPointerCapture,
+    startPinchGesture: gestureState.startPinchGesture,
+    toggleSegmentSelection,
+    updateAll,
+    updatePointerFromEvent: gestureState.updatePointerFromEvent,
   },
 });
 const canvasPointerCleanup = createCanvasPointerCleanup({
@@ -2966,121 +2991,7 @@ if (toggleAllFootnotesButton) {
   toggleAllFootnotesButton.addEventListener("click", toggleAllFootnotes);
 }
 
-canvas.addEventListener("pointerdown", (event) => {
-  if (!state.image) return;
-  gestureState.updatePointerFromEvent(event);
-  gestureState.setPointerCapture(event.pointerId);
-  if (event.pointerType === "touch" && pointerTracker.activeCount() >= 2) {
-    event.preventDefault();
-    gestureState.startPinchGesture();
-    updateAll();
-    return;
-  }
-
-  if (state.isDrawingSegments || state.isDrawingArea) {
-    event.preventDefault();
-    const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-    state.snapPoint = null;
-    state.orthogonalGuide = null;
-    state.alignmentGuide = null;
-    state.selectionBox = null;
-    if (state.isDrawingSegments && !state.pendingPoint) {
-      state.snapPoint = resolveStartPoint(rawPoint).snap;
-    }
-    if (state.isDrawingArea) {
-      const resolved = resolvePolygonPoint(rawPoint);
-      state.polygonCloseTarget = resolved.close ? resolved.point : null;
-      state.polygonPreviewPoint = resolved.point;
-      state.snapPoint = resolved.snap;
-      state.orthogonalGuide = resolved.guide;
-      state.alignmentGuide = resolved.alignmentGuide;
-    }
-    state.interactionMode = state.isDrawingArea ? "draw-area" : "draw-line";
-    gestureState.beginDrag(event);
-    updateAll();
-    return;
-  }
-
-  const hit = canvasHitTesting.resolveHit(event.clientX, event.clientY);
-  const {
-    endpoint: hitEndpoint,
-    label: hitLabel,
-    segment: hitSegment,
-    polygonLabel: hitPolygonLabel,
-    polygon: hitPolygon,
-  } = hit;
-  const touchInput = event.pointerType === "touch";
-  const touchBasePick = touchInput
-    && state.isChoosingBase
-    && !state.isDrawingSegments
-    && !hitEndpoint
-    && (hitLabel || hitSegment);
-  const touchEmptyPan = touchInput
-    && !state.isDrawingSegments
-    && !hitEndpoint
-    && !hitLabel
-    && !hitSegment
-    && !hitPolygonLabel
-    && !hitPolygon;
-  const wantsPan = event.button === 1 || state.isSpacePressed || touchEmptyPan;
-
-  state.snapPoint = null;
-  state.orthogonalGuide = null;
-  state.alignmentGuide = null;
-  state.selectionBox = null;
-
-  if (wantsPan) {
-    state.pendingPoint = null;
-    state.interactionMode = "pan";
-  } else if (touchBasePick) {
-    const target = hitLabel || hitSegment;
-    selectOnlySegment(target.id);
-    state.pendingPoint = null;
-    state.interactionMode = "base-pick";
-  } else if (hitEndpoint) {
-    selectOnlySegment(hitEndpoint.segment.id);
-    state.pendingPoint = null;
-    state.interactionMode = "endpoint";
-  } else if (hitLabel) {
-    if (event.shiftKey) {
-      toggleSegmentSelection(hitLabel.id);
-      state.interactionMode = "shift-select";
-    } else {
-      selectOnlySegment(hitLabel.id);
-      state.interactionMode = "label";
-    }
-    state.pendingPoint = null;
-  } else if (hitSegment) {
-    if (event.shiftKey) {
-      toggleSegmentSelection(hitSegment.id);
-      state.interactionMode = "shift-select";
-    } else {
-      selectOnlySegment(hitSegment.id);
-      state.interactionMode = "segment";
-    }
-    state.pendingPoint = null;
-  } else if (hitPolygonLabel || hitPolygon) {
-    const polygon = hitPolygonLabel || hitPolygon;
-    selectOnlyPolygon(polygon.id);
-    state.pendingPoint = null;
-    state.interactionMode = "polygon";
-  } else {
-    state.interactionMode = "select";
-  }
-
-  gestureState.beginDrag(event, {
-    endpoint: hitEndpoint,
-    labelSegment: hitLabel,
-    hitSegment: hitLabel || hitSegment,
-    polygon: hitPolygonLabel || hitPolygon,
-    polygonPoints: hitPolygonLabel || hitPolygon
-      ? (hitPolygonLabel || hitPolygon).points.map(clonePoint)
-      : null,
-    labelOffset: hitLabel ? currentLabelOffset(hitLabel) : { x: 0, y: -36 },
-  });
-  gestureState.scheduleTouchContextMenu(hitLabel || hitSegment, event);
-  updateAll();
-});
+canvas.addEventListener("pointerdown", canvasPointerDown.handlePointerDown);
 
 canvas.addEventListener("pointermove", (event) => {
   gestureState.updatePointerFromEvent(event);
