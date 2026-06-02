@@ -20,6 +20,7 @@ const files = [
   "planscale-seo/app/canvas-hover-preview.js",
   "planscale-seo/app/canvas-drag-interactions.js",
   "planscale-seo/app/canvas-pointer-down.js",
+  "planscale-seo/app/canvas-pointer-up.js",
   "planscale-seo/app/canvas-pointer-cleanup.js",
   "planscale-seo/app/canvas-wheel.js",
   "planscale-seo/app/app-keyboard.js",

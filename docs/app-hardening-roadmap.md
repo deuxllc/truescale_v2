@@ -8,7 +8,7 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 
 - Static browser app with no backend.
 - Browser scripts still load through ordered `<script>` tags and `window.PlanScale...` namespaces.
-- Domain code is now split into dedicated modules for geometry, measurement, dialogs, project format, selection state, canvas view transforms, canvas hit-testing, canvas rendering, hover/preview interactions, drag interactions, pointer-down orchestration, pointer cleanup, gesture state, wheel interactions, segment context actions, keyboard shortcuts, resize handling, touch pointer tracking, detection, snapping, export, and the segments panel.
+- Domain code is now split into dedicated modules for geometry, measurement, dialogs, project format, selection state, canvas view transforms, canvas hit-testing, canvas rendering, hover/preview interactions, drag interactions, pointer-down and pointer-up orchestration, pointer cleanup, gesture state, wheel interactions, segment context actions, keyboard shortcuts, resize handling, touch pointer tracking, detection, snapping, export, and the segments panel.
 - `app.js` remains the orchestration layer for canvas interaction, state transitions, history, and UI synchronization.
 
 ## Implemented In This Cycle
@@ -21,8 +21,8 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 - Added normalized meter and square-meter values to data export.
 - Added `.truescale.json` project export/import through `PlanScaleProjectFormat`.
 - Replaced browser `prompt()` and `confirm()` with app-owned modal dialogs.
-- Extracted app state, history snapshots, selection state, canvas view transforms, canvas hit-testing, canvas rendering, hover/preview interactions, drag interactions, pointer-down orchestration, pointer cleanup, gesture state, wheel interactions, segment context actions, keyboard shortcuts, resize handling, and touch pointer tracking into dedicated modules.
-- Added unit coverage for canvas hit priority, endpoint hits, polygon hits, selection state, drag interactions, pointer-down orchestration, pointer cleanup, and selection-box inclusion.
+- Extracted app state, history snapshots, selection state, canvas view transforms, canvas hit-testing, canvas rendering, hover/preview interactions, drag interactions, pointer-down and pointer-up orchestration, pointer cleanup, gesture state, wheel interactions, segment context actions, keyboard shortcuts, resize handling, and touch pointer tracking into dedicated modules.
+- Added unit coverage for canvas hit priority, endpoint hits, polygon hits, selection state, drag interactions, pointer-down and pointer-up orchestration, pointer cleanup, and selection-box inclusion.
 - Added unit coverage for gesture drag lifecycle and transient-state reset.
 - Removed stale DOM references for missing `fitButton` and `resultOutput`.
 - Removed the disabled right-angle drawing branch while preserving right-angle coloring metadata.

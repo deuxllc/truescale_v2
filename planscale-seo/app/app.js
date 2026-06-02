@@ -71,6 +71,9 @@ const {
   createCanvasPointerDownController,
 } = window.PlanScaleCanvasPointerDown;
 const {
+  createCanvasPointerUpController,
+} = window.PlanScaleCanvasPointerUp;
+const {
   createCanvasPointerCleanup,
 } = window.PlanScaleCanvasPointerCleanup;
 const {
@@ -367,6 +370,35 @@ const canvasPointerDown = createCanvasPointerDownController({
     toggleSegmentSelection,
     updateAll,
     updatePointerFromEvent: gestureState.updatePointerFromEvent,
+  },
+});
+const canvasPointerUp = createCanvasPointerUpController({
+  state,
+  pointerTracker,
+  hitTesting: canvasHitTesting,
+  actions: {
+    addPoint,
+    addPolygonPoint,
+    clampPointToImage,
+    clearLongPressTimer: gestureState.clearLongPressTimer,
+    commitHistory,
+    consumeTouchContextMenuOpened: gestureState.consumeTouchContextMenuOpened,
+    draw,
+    endDrag: gestureState.endDrag,
+    handleSegmentPick,
+    now: () => performance.now(),
+    releasePointerCapture: gestureState.releasePointerCapture,
+    removePointerFromEvent: gestureState.removePointerFromEvent,
+    resetTransient: gestureState.resetTransient,
+    resolvePolygonPoint,
+    resolveStartPoint,
+    scheduleViewSave,
+    screenToImage,
+    selectOnlyPolygon,
+    selectOnlySegment,
+    showToast,
+    toggleSegmentSelection,
+    updateAll,
   },
 });
 const canvasPointerCleanup = createCanvasPointerCleanup({
@@ -3015,103 +3047,7 @@ canvas.addEventListener("pointermove", (event) => {
   canvasDragInteractions.handlePointerMove(event);
 });
 
-canvas.addEventListener("pointerup", (event) => {
-  if (!state.image) return;
-  gestureState.clearLongPressTimer();
-  gestureState.removePointerFromEvent(event);
-  gestureState.releasePointerCapture(event.pointerId);
-  if (gestureState.consumeTouchContextMenuOpened()) {
-    gestureState.resetTransient(null);
-    state.lastPointerUpAt = performance.now();
-    draw();
-    return;
-  }
-  if (pointerTracker.hasPinch() || state.interactionMode === "pinch") {
-    gestureState.resetTransient(null);
-    state.lastPointerUpAt = performance.now();
-    scheduleViewSave();
-    draw();
-    return;
-  }
-  state.lastPointerUpAt = performance.now();
-
-  const wasClick = !state.didDrag;
-  const hadSelectionBox = Boolean(state.selectionBox);
-  const hit = wasClick
-    ? canvasHitTesting.resolveHit(event.clientX, event.clientY, { includeEndpoint: false })
-    : {};
-  const {
-    label: hitLabel = null,
-    segment: hitSegment = null,
-    polygonLabel: hitPolygonLabel = null,
-    polygon: hitPolygon = null,
-  } = hit;
-  const completedMode = state.interactionMode;
-  const completedDragStart = state.dragStart;
-  const shouldAddPoint = state.isDrawingSegments && wasClick && (
-    completedMode === "draw-line" || (!hitLabel && !hitSegment && completedMode !== "endpoint")
-  );
-  const shouldAddPolygonPoint = state.isDrawingArea && wasClick && completedMode === "draw-area";
-  gestureState.endDrag();
-
-  if (shouldAddPolygonPoint) {
-    const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-    const resolved = resolvePolygonPoint(rawPoint);
-    addPolygonPoint(resolved.point);
-  } else if (shouldAddPoint) {
-    const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
-    const resolvedStart = state.pendingPoint ? null : resolveStartPoint(rawPoint);
-    addPoint(resolvedStart ? resolvedStart.point : rawPoint);
-  } else if (completedMode === "endpoint" || completedMode === "label") {
-    updateAll();
-    if (state.didDrag) {
-      commitHistory();
-    }
-  } else if (completedMode === "polygon") {
-    updateAll();
-    if (state.didDrag) {
-      commitHistory();
-    }
-  } else if (completedMode === "segment" && !wasClick) {
-    state.selectionBox = null;
-    state.pendingPoint = null;
-    updateAll();
-  } else if (completedMode === "base-pick" && wasClick && completedDragStart?.hitSegment) {
-    if (handleSegmentPick(completedDragStart.hitSegment.id, { requireConfirmation: event.pointerType === "touch" })) {
-      state.pendingPoint = null;
-      return;
-    }
-  } else if (completedMode === "pan" || completedMode === "base-pick") {
-    scheduleViewSave();
-  } else if (hadSelectionBox) {
-    const selectedCount = state.selectedSegmentIds.size + state.selectedPolygonIds.size;
-    state.selectionBox = null;
-    state.pendingPoint = null;
-    updateAll();
-    if (selectedCount) {
-      showToast(`Выбрано: ${selectedCount}`);
-    }
-  } else if (hitLabel || hitSegment) {
-    const hitId = (hitLabel || hitSegment).id;
-    if (handleSegmentPick(hitId, { requireConfirmation: event.pointerType === "touch" })) {
-      state.pendingPoint = null;
-      return;
-    }
-    if (event.shiftKey || completedMode === "shift-select") {
-      if (completedMode !== "shift-select") {
-        toggleSegmentSelection(hitId);
-      }
-    } else {
-      selectOnlySegment(hitId);
-    }
-    state.pendingPoint = null;
-    updateAll();
-  } else if (hitPolygonLabel || hitPolygon) {
-    selectOnlyPolygon((hitPolygonLabel || hitPolygon).id);
-    state.pendingPoint = null;
-    updateAll();
-  }
-});
+canvas.addEventListener("pointerup", canvasPointerUp.handlePointerUp);
 
 canvas.addEventListener("pointerleave", canvasPointerCleanup.handlePointerLeave);
 canvas.addEventListener("pointercancel", canvasPointerCleanup.handlePointerCancel);

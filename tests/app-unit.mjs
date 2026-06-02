@@ -21,6 +21,7 @@ for (const file of [
   "planscale-seo/app/app-selection.js",
   "planscale-seo/app/canvas-drag-interactions.js",
   "planscale-seo/app/canvas-pointer-down.js",
+  "planscale-seo/app/canvas-pointer-up.js",
   "planscale-seo/app/canvas-pointer-cleanup.js",
   "planscale-seo/app/pointer-tracker.js",
   "planscale-seo/app/canvas-gesture-state.js",
@@ -38,6 +39,7 @@ const hitTesting = context.window.PlanScaleCanvasHitTesting;
 const selectionFactory = context.window.PlanScaleSelection;
 const dragInteractionsFactory = context.window.PlanScaleCanvasDragInteractions;
 const pointerDownFactory = context.window.PlanScaleCanvasPointerDown;
+const pointerUpFactory = context.window.PlanScaleCanvasPointerUp;
 const pointerCleanupFactory = context.window.PlanScaleCanvasPointerCleanup;
 const pointerTracking = context.window.PlanScalePointerTracker;
 const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
@@ -458,6 +460,129 @@ basePickHarness.controller.handlePointerDown({
 });
 assert.equal(basePickHarness.state.interactionMode, "base-pick");
 assert.deepEqual(basePickHarness.calls.find((call) => call[0] === "selectOnlySegment"), ["selectOnlySegment", 9]);
+
+function createPointerUpHarness(stateOverrides = {}, hit = {}, hasPinch = false) {
+  const calls = [];
+  const state = {
+    image: true,
+    didDrag: false,
+    interactionMode: null,
+    dragStart: null,
+    isDrawingSegments: false,
+    isDrawingArea: false,
+    pendingPoint: null,
+    selectionBox: null,
+    selectedSegmentIds: new Set(),
+    selectedPolygonIds: new Set(),
+    ...stateOverrides,
+  };
+  const controller = pointerUpFactory.createCanvasPointerUpController({
+    state,
+    pointerTracker: {
+      hasPinch: () => hasPinch,
+    },
+    hitTesting: {
+      resolveHit: () => hit,
+    },
+    actions: {
+      addPoint: (point) => {
+        calls.push(["addPoint", point.x, point.y]);
+      },
+      addPolygonPoint: (point) => {
+        calls.push(["addPolygonPoint", point.x, point.y]);
+      },
+      clampPointToImage: (point) => point,
+      clearLongPressTimer: () => {
+        calls.push(["clearLongPressTimer"]);
+      },
+      commitHistory: () => {
+        calls.push(["commitHistory"]);
+      },
+      consumeTouchContextMenuOpened: () => Boolean(state.consumeTouchContextMenuOpened),
+      draw: () => {
+        calls.push(["draw"]);
+      },
+      endDrag: () => {
+        calls.push(["endDrag"]);
+      },
+      handleSegmentPick: (id, options) => {
+        calls.push(["handleSegmentPick", id, Boolean(options.requireConfirmation)]);
+        return Boolean(state.segmentPickHandled);
+      },
+      now: () => 123,
+      releasePointerCapture: (pointerId) => {
+        calls.push(["releasePointerCapture", pointerId]);
+      },
+      removePointerFromEvent: () => {
+        calls.push(["removePointerFromEvent"]);
+      },
+      resetTransient: () => {
+        calls.push(["resetTransient"]);
+      },
+      resolvePolygonPoint: (point) => ({ point }),
+      resolveStartPoint: (point) => ({ point: { x: point.x + 1, y: point.y + 1 } }),
+      scheduleViewSave: () => {
+        calls.push(["scheduleViewSave"]);
+      },
+      screenToImage: (clientX, clientY) => ({ x: clientX, y: clientY }),
+      selectOnlyPolygon: (id) => {
+        calls.push(["selectOnlyPolygon", id]);
+      },
+      selectOnlySegment: (id) => {
+        calls.push(["selectOnlySegment", id]);
+      },
+      showToast: (message) => {
+        calls.push(["showToast", message]);
+      },
+      toggleSegmentSelection: (id) => {
+        calls.push(["toggleSegmentSelection", id]);
+      },
+      updateAll: () => {
+        calls.push(["updateAll"]);
+      },
+    },
+  });
+  return { calls, controller, state };
+}
+
+const pinchUpHarness = createPointerUpHarness({ interactionMode: "pinch" }, {}, true);
+assert.equal(pinchUpHarness.controller.handlePointerUp({ pointerId: 1, pointerType: "touch" }), true);
+assert.equal(pinchUpHarness.state.lastPointerUpAt, 123);
+assert.equal(pinchUpHarness.calls.some((call) => call[0] === "resetTransient"), true);
+assert.equal(pinchUpHarness.calls.some((call) => call[0] === "scheduleViewSave"), true);
+
+const addPointHarness = createPointerUpHarness({
+  isDrawingSegments: true,
+  interactionMode: "draw-line",
+});
+addPointHarness.controller.handlePointerUp({
+  pointerId: 2,
+  pointerType: "mouse",
+  clientX: 20,
+  clientY: 30,
+});
+assert.deepEqual(addPointHarness.calls.find((call) => call[0] === "addPoint"), ["addPoint", 21, 31]);
+assert.equal(addPointHarness.calls.some((call) => call[0] === "endDrag"), true);
+
+const dragCommitHarness = createPointerUpHarness({
+  didDrag: true,
+  interactionMode: "endpoint",
+});
+dragCommitHarness.controller.handlePointerUp({ pointerId: 3, pointerType: "mouse" });
+assert.equal(dragCommitHarness.calls.some((call) => call[0] === "updateAll"), true);
+assert.equal(dragCommitHarness.calls.some((call) => call[0] === "commitHistory"), true);
+
+const selectionBoxHarness = createPointerUpHarness({
+  didDrag: true,
+  interactionMode: "select",
+  selectionBox: { start: { x: 0, y: 0 }, end: { x: 5, y: 5 } },
+  selectedSegmentIds: new Set([1, 2]),
+  selectedPolygonIds: new Set([10]),
+});
+selectionBoxHarness.controller.handlePointerUp({ pointerId: 4, pointerType: "mouse" });
+assert.equal(selectionBoxHarness.state.selectionBox, null);
+assert.equal(selectionBoxHarness.state.pendingPoint, null);
+assert.deepEqual(selectionBoxHarness.calls.find((call) => call[0] === "showToast"), ["showToast", "Выбрано: 3"]);
 
 const removedCanvasClasses = [];
 const cleanupState = {
