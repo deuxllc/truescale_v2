@@ -23,6 +23,7 @@ for (const file of [
   "planscale-seo/app/canvas-pointer-down.js",
   "planscale-seo/app/canvas-pointer-up.js",
   "planscale-seo/app/canvas-pointer-cleanup.js",
+  "planscale-seo/app/canvas-pinch-zoom.js",
   "planscale-seo/app/pointer-tracker.js",
   "planscale-seo/app/canvas-gesture-state.js",
 ]) {
@@ -41,6 +42,7 @@ const dragInteractionsFactory = context.window.PlanScaleCanvasDragInteractions;
 const pointerDownFactory = context.window.PlanScaleCanvasPointerDown;
 const pointerUpFactory = context.window.PlanScaleCanvasPointerUp;
 const pointerCleanupFactory = context.window.PlanScaleCanvasPointerCleanup;
+const pinchZoomFactory = context.window.PlanScaleCanvasPinchZoom;
 const pointerTracking = context.window.PlanScalePointerTracker;
 const gestureStateFactory = context.window.PlanScaleCanvasGestureState;
 
@@ -642,6 +644,44 @@ assert.equal(cleanupLongPressClears, 1);
 assert.equal(cleanupPointerRemovals, 1);
 assert.equal(cleanupTransientResets, 1);
 assert.equal(cleanupDraws, 2);
+
+const pinchCalls = [];
+const pinchZoom = pinchZoomFactory.createCanvasPinchZoom({
+  pointerTracker: {
+    hasPinch: () => true,
+    activeCount: () => 2,
+    pairMetrics: () => ({
+      center: { x: 50, y: 60 },
+      distance: 40,
+    }),
+    currentPinchDistance: () => 20,
+    updatePinchDistance: (distance) => {
+      pinchCalls.push(["updatePinchDistance", distance]);
+    },
+  },
+  actions: {
+    draw: () => {
+      pinchCalls.push(["draw"]);
+    },
+    scheduleViewSave: () => {
+      pinchCalls.push(["scheduleViewSave"]);
+    },
+    zoomAtClientPoint: (x, y, factor) => {
+      pinchCalls.push(["zoomAtClientPoint", x, y, factor]);
+    },
+  },
+});
+let pinchMovePrevented = false;
+assert.equal(pinchZoom.handlePointerMove({
+  pointerType: "touch",
+  preventDefault: () => {
+    pinchMovePrevented = true;
+  },
+}), true);
+assert.equal(pinchMovePrevented, true);
+assert.deepEqual(pinchCalls[0], ["zoomAtClientPoint", 50, 60, 2]);
+assert.deepEqual(pinchCalls[1], ["updatePinchDistance", 40]);
+assert.deepEqual(pinchCalls.slice(2), [["draw"], ["scheduleViewSave"]]);
 
 const gestureTestState = {
   isDragging: false,

@@ -77,6 +77,9 @@ const {
   createCanvasPointerCleanup,
 } = window.PlanScaleCanvasPointerCleanup;
 const {
+  createCanvasPinchZoom,
+} = window.PlanScaleCanvasPinchZoom;
+const {
   createCanvasWheelController,
 } = window.PlanScaleCanvasWheel;
 const {
@@ -409,6 +412,14 @@ const canvasPointerCleanup = createCanvasPointerCleanup({
   actions: {
     draw,
     hideCursorCoordinates,
+  },
+});
+const canvasPinchZoom = createCanvasPinchZoom({
+  pointerTracker,
+  actions: {
+    draw,
+    scheduleViewSave,
+    zoomAtClientPoint,
   },
 });
 const segmentContextActions = createSegmentContextActions({
@@ -3027,16 +3038,7 @@ canvas.addEventListener("pointerdown", canvasPointerDown.handlePointerDown);
 
 canvas.addEventListener("pointermove", (event) => {
   gestureState.updatePointerFromEvent(event);
-  if (pointerTracker.hasPinch() && event.pointerType === "touch" && pointerTracker.activeCount() >= 2) {
-    event.preventDefault();
-    const metrics = pointerTracker.pairMetrics();
-    if (metrics && metrics.distance >= 1) {
-      const factor = metrics.distance / Math.max(pointerTracker.currentPinchDistance(), 1);
-      zoomAtClientPoint(metrics.center.x, metrics.center.y, factor);
-      pointerTracker.updatePinchDistance(metrics.distance);
-      draw();
-      scheduleViewSave();
-    }
+  if (canvasPinchZoom.handlePointerMove(event)) {
     return;
   }
 
