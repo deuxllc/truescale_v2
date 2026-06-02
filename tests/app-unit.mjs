@@ -19,6 +19,7 @@ for (const file of [
   "planscale-seo/app/project-format.js",
   "planscale-seo/app/canvas-hit-testing.js",
   "planscale-seo/app/app-selection.js",
+  "planscale-seo/app/canvas-hover-preview.js",
   "planscale-seo/app/canvas-drag-interactions.js",
   "planscale-seo/app/canvas-pointer-down.js",
   "planscale-seo/app/canvas-pointer-up.js",
@@ -38,6 +39,7 @@ const appHistory = context.window.PlanScaleHistory;
 const projectFormat = context.window.PlanScaleProjectFormat;
 const hitTesting = context.window.PlanScaleCanvasHitTesting;
 const selectionFactory = context.window.PlanScaleSelection;
+const hoverPreviewFactory = context.window.PlanScaleCanvasHoverPreview;
 const dragInteractionsFactory = context.window.PlanScaleCanvasDragInteractions;
 const pointerDownFactory = context.window.PlanScaleCanvasPointerDown;
 const pointerUpFactory = context.window.PlanScaleCanvasPointerUp;
@@ -260,6 +262,62 @@ selection.clearSelection();
 assert.deepEqual(selectedSegments(), []);
 assert.deepEqual(selectedPolygons(), []);
 
+const hoverClasses = [];
+const hoverState = {
+  image: true,
+  isDragging: false,
+  dragStart: null,
+  isDrawingSegments: true,
+  isDrawingArea: false,
+  hoveredSegmentId: 9,
+  pendingPoint: { x: 0, y: 0 },
+};
+let hoverDraws = 0;
+let cursorUpdates = 0;
+const hoverPreview = hoverPreviewFactory.createCanvasHoverPreview({
+  canvas: {
+    classList: {
+      toggle: (className, enabled) => hoverClasses.push([className, enabled]),
+    },
+  },
+  state: hoverState,
+  actions: {
+    clampPointToImage: (point) => point,
+    draw: () => {
+      hoverDraws++;
+    },
+    findLabelAt: () => ({ id: 9 }),
+    findSegmentAt: () => null,
+    resolveEndpointPoint: (point) => ({
+      point,
+      snap: { x: point.x, y: point.y },
+      guide: { axis: "horizontal" },
+      alignmentGuide: { axis: "vertical" },
+    }),
+    resolvePolygonPoint: (point) => ({
+      point,
+      close: false,
+      snap: null,
+      guide: null,
+      alignmentGuide: null,
+    }),
+    resolveStartPoint: (point) => ({
+      point,
+      snap: { x: point.x, y: point.y },
+    }),
+    screenToImage: (clientX, clientY) => ({ x: clientX, y: clientY }),
+    updateCursorCoordinates: () => {
+      cursorUpdates++;
+    },
+  },
+});
+assert.equal(hoverPreview.handlePointerMove({ clientX: 30, clientY: 40 }), true);
+assert.equal(cursorUpdates, 1);
+assert.equal(hoverState.hoveredSegmentId, null);
+assert.deepEqual(hoverState.previewPoint, { x: 30, y: 40 });
+assert.deepEqual(hoverClasses, [["hovering-segment", false]]);
+assert.equal(hoverDraws, 1);
+
 const dragSegment = {
   id: 1,
   start: { x: 0, y: 0 },
@@ -324,7 +382,7 @@ assert.equal(dragInteractions.handlePointerMove({ clientX: 20, clientY: 5 }), tr
 assert.deepEqual(dragSegment.start, { x: 20, y: 5 });
 assert.equal(dragLongPressClears, 1);
 assert.equal(dragMarks, 1);
-assert.equal(dragDraws, 2);
+assert.equal(dragDraws, 1);
 assert.equal(dragState.orthogonalGuide.axis, "horizontal");
 
 dragState.interactionMode = "select";

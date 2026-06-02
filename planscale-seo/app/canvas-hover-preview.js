@@ -27,10 +27,11 @@
         ? findLabelAt(event.clientX, event.clientY) || findSegmentAt(event.clientX, event.clientY)
         : null;
       const hoverId = hoverTarget?.id ?? null;
+      let needsDraw = false;
       if (hoverId !== state.hoveredSegmentId) {
         state.hoveredSegmentId = hoverId;
         canvas.classList.toggle("hovering-segment", Boolean(hoverId));
-        draw();
+        needsDraw = true;
       }
 
       if (state.pendingPoint && state.isDrawingSegments) {
@@ -40,11 +41,11 @@
         state.snapPoint = resolved.snap;
         state.orthogonalGuide = resolved.guide;
         state.alignmentGuide = resolved.alignmentGuide;
-        draw();
+        needsDraw = true;
       } else if (state.isDrawingSegments && !state.pendingPoint) {
         const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
         state.snapPoint = resolveStartPoint(rawPoint).snap;
-        draw();
+        needsDraw = true;
       } else if (state.isDrawingArea) {
         const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
         const resolved = resolvePolygonPoint(rawPoint);
@@ -53,6 +54,10 @@
         state.snapPoint = resolved.snap;
         state.orthogonalGuide = resolved.guide;
         state.alignmentGuide = resolved.alignmentGuide;
+        needsDraw = true;
+      }
+
+      if (needsDraw) {
         draw();
       }
 

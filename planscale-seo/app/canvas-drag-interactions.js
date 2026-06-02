@@ -47,13 +47,11 @@
         state.snapPoint = resolved.snap;
         state.orthogonalGuide = resolved.guide;
         state.alignmentGuide = resolved.alignmentGuide;
-        draw();
       } else if (state.interactionMode === "label" && state.dragStart.labelSegment) {
         state.dragStart.labelSegment.labelOffset = {
           x: state.dragStart.labelOffset.x + dx,
           y: state.dragStart.labelOffset.y + dy,
         };
-        draw();
       } else if (state.interactionMode === "polygon" && state.dragStart.polygon && state.dragStart.polygonPoints) {
         const imageDx = dx / Math.max(state.scale, 0.001);
         const imageDy = dy / Math.max(state.scale, 0.001);
@@ -61,7 +59,6 @@
           x: point.x + imageDx,
           y: point.y + imageDy,
         }));
-        draw();
       } else if (state.interactionMode === "draw-line" && state.pendingPoint) {
         const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
         const resolved = resolveEndpointPoint(rawPoint, state.pendingPoint, null);
@@ -69,7 +66,6 @@
         state.snapPoint = resolved.snap;
         state.orthogonalGuide = resolved.guide;
         state.alignmentGuide = resolved.alignmentGuide;
-        draw();
       } else if (state.interactionMode === "draw-area") {
         const rawPoint = clampPointToImage(screenToImage(event.clientX, event.clientY));
         const resolved = resolvePolygonPoint(rawPoint);
@@ -78,15 +74,13 @@
         state.snapPoint = resolved.snap;
         state.orthogonalGuide = resolved.guide;
         state.alignmentGuide = resolved.alignmentGuide;
-        draw();
       } else if (state.interactionMode === "base-pick") {
         state.offsetX = state.dragStart.offsetX + dx;
         state.offsetY = state.dragStart.offsetY + dy;
       } else if (state.interactionMode === "segment") {
         state.selectionBox = null;
-        draw();
       } else if (state.pendingPoint) {
-        draw();
+        // Keep pending line drags from starting a selection box.
       } else if (state.interactionMode === "pan") {
         state.offsetX = state.dragStart.offsetX + dx;
         state.offsetY = state.dragStart.offsetY + dy;

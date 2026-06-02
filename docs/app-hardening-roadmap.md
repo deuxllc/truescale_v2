@@ -23,6 +23,7 @@ Bring the app layer in `planscale-seo/app` to a stable 1.0 foundation while pres
 - Replaced browser `prompt()` and `confirm()` with app-owned modal dialogs.
 - Extracted app state, history snapshots, selection state, canvas view transforms, canvas hit-testing, canvas rendering, hover/preview interactions, drag interactions, pointer-down and pointer-up orchestration, pointer cleanup, pinch zoom, gesture state, wheel interactions, segment context actions, keyboard shortcuts, resize handling, and touch pointer tracking into dedicated modules.
 - Added unit coverage for canvas hit priority, endpoint hits, polygon hits, selection state, drag interactions, pointer-down and pointer-up orchestration, pointer cleanup, pinch zoom, and selection-box inclusion.
+- Coalesced drag and hover preview pointer-move rendering so one pointer event schedules one canvas draw instead of duplicate redraws.
 - Added unit coverage for gesture drag lifecycle and transient-state reset.
 - Removed stale DOM references for missing `fitButton` and `resultOutput`.
 - Removed the disabled right-angle drawing branch while preserving right-angle coloring metadata.
