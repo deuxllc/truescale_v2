@@ -225,6 +225,43 @@ async function runCase(browser, origin, profile) {
         && rects.every((rect) => rect.width >= 38 && rect.height >= 38);
     })
     : true;
+  await page.locator("#settingsButton").click();
+  const settingsMenuReadable = await page.evaluate(() => {
+    const menu = document.querySelector("#settingsMenu");
+    if (!menu || menu.hidden) return false;
+
+    const expectedLabels = [
+      "Система",
+      "Единицы",
+      "Точность",
+      "Сноски",
+      "Подложка",
+      "Единицы в сносках",
+      "Показывать сноски",
+      "Проект",
+    ];
+    const hasLabels = expectedLabels.every((label) => menu.innerText.includes(label));
+    const labelNodes = [
+      ...menu.querySelectorAll(".settings-row > span, .settings-check > span, .settings-danger-zone > span"),
+    ];
+    const labelsVisible = labelNodes.length >= expectedLabels.length && labelNodes.every((node) => {
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return style.display !== "none"
+        && style.visibility !== "hidden"
+        && rect.width > 1
+        && rect.height > 1;
+    });
+    const resetButton = menu.querySelector("#resetPlanButton");
+    const resetRect = resetButton?.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const resetReadable = Boolean(resetButton)
+      && resetButton.innerText.includes("Сбросить проект")
+      && resetRect.width >= Math.min(160, menuRect.width * 0.72)
+      && resetRect.height >= 34;
+    return hasLabels && labelsVisible && resetReadable;
+  });
+  await page.locator("#settingsButton").click();
   await page.locator("#detectModeButton").click();
   const sensitivityVisibleAuto = await page.locator("#detectionSensitivityControl").evaluate((node) => !node.hidden);
   const sliderValue = await page.locator("#detectionSensitivityInput").inputValue();
@@ -454,6 +491,7 @@ async function runCase(browser, origin, profile) {
     measurementsShortcutHidden,
     resetLivesInSettings,
     mobileTopbarAligned,
+    settingsMenuReadable,
     toolbarRecalibrateVisible,
     toolbarBaseFieldVisible,
     inlineHasBaseLabel,
@@ -497,6 +535,7 @@ try {
     !result.measurementsShortcutHidden ||
     !result.resetLivesInSettings ||
     !result.mobileTopbarAligned ||
+    !result.settingsMenuReadable ||
     !result.toolbarRecalibrateVisible ||
     result.toolbarBaseFieldVisible ||
     result.inlineHasBaseLabel ||

@@ -5351,3 +5351,55 @@ body:not(.empty-mode) #recalibrateButton:focus-visible {
     font-size: 0 !important;
   }
 }
+
+/* QA pass: topbar mobile rules hide toolbar text, but settings labels must stay visible. */
+body:not(.empty-mode) .topbar .settings-menu span {
+  display: inline !important;
+  max-width: none;
+  overflow: visible;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+body:not(.empty-mode) .topbar .settings-menu .settings-row > span {
+  display: block !important;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+body:not(.empty-mode) .topbar .settings-menu .settings-check > span {
+  display: inline !important;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+body:not(.empty-mode) .topbar .settings-menu .settings-danger-zone > span {
+  display: block !important;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+body:not(.empty-mode) .topbar .settings-menu #resetPlanButton {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 36px !important;
+  aspect-ratio: auto !important;
+  padding: 0 12px !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  gap: 8px !important;
+  justify-content: center;
+}
+
+body:not(.empty-mode) .topbar .settings-menu #resetPlanButton .button-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex: 0 0 16px !important;
+}
